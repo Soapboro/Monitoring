@@ -13,6 +13,18 @@ from app.dependencies import require_admin, require_teacher
 router = APIRouter(prefix="/api/teachers", tags=["teachers"])
 
 
+@router.get("/me", response_model=TeacherOut)
+async def get_my_profile(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_teacher),
+):
+    result = await db.execute(select(Teacher).where(Teacher.user_id == current_user.id))
+    teacher = result.scalar_one_or_none()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Профиль преподавателя не найден")
+    return teacher
+
+
 @router.get("", response_model=list[TeacherOut])
 async def list_teachers(
     db: AsyncSession = Depends(get_db),
