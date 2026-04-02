@@ -18,6 +18,7 @@ export interface TeacherProfile {
   first_name: string
   middle_name: string | null
   position: string | null
+  phone: string | null
 }
 
 export interface TeachingAssignment {
@@ -37,6 +38,18 @@ export interface GradeOut {
   value: number | null
   passed: boolean | null
   date_recorded: string
+  comment: string | null
+  session_id: number | null
+  recorded_by: number | null
+}
+
+export interface Subject {
+  id: number
+  name: string
+  code: string | null
+  hours_total: number | null
+  control_form: string | null
+  department_id: number | null
 }
 
 export interface TestSession {
@@ -57,6 +70,7 @@ export interface AttendanceRecord {
   assignment_id: number
   lesson_date: string
   is_present: boolean
+  comment: string | null
 }
 
 // --- Admin ---

@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react'
-import { getStudents } from '../../api/resources'
+import { useNavigate } from 'react-router-dom'
+import { getStudents, getGroups } from '../../api/resources'
 import type { StudentProfile } from '../../api/resources'
 
 export default function StudentsPage() {
+  const navigate = useNavigate()
   const [students, setStudents] = useState<StudentProfile[]>([])
+  const [groupNames, setGroupNames] = useState<Record<number, string>>({})
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getStudents().then(setStudents).finally(() => setLoading(false))
+    Promise.all([getStudents(), getGroups()]).then(([studs, groups]) => {
+      setStudents(studs)
+      const map: Record<number, string> = {}
+      for (const g of groups) map[g.id] = g.name
+      setGroupNames(map)
+    }).finally(() => setLoading(false))
   }, [])
 
   const filtered = students.filter(s => {
@@ -41,18 +49,32 @@ export default function StudentsPage() {
               <tr>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">ФИО</th>
                 <th className="text-left px-4 py-3 text-slate-500 font-medium">№ студ.</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">Группа ID</th>
+                <th className="text-left px-4 py-3 text-slate-500 font-medium">Группа</th>
                 <th className="text-right px-6 py-3 text-slate-500 font-medium">Статус</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filtered.map(s => (
-                <tr key={s.id} className="hover:bg-slate-50">
-                  <td className="px-6 py-3 text-slate-800 font-medium">
+                <tr
+                  key={s.id}
+                  onClick={() => navigate(`/students/${s.id}`)}
+                  className="hover:bg-blue-50 cursor-pointer transition-colors"
+                >
+                  <td className="px-6 py-3 text-slate-800 font-medium flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-semibold text-blue-600">{s.last_name[0]}</span>
+                    </div>
                     {s.last_name} {s.first_name} {s.middle_name ?? ''}
                   </td>
                   <td className="px-4 py-3 text-slate-500">{s.student_num ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-500">#{s.group_id}</td>
+                  <td className="px-4 py-3 text-slate-500">
+                    <button
+                      onClick={e => { e.stopPropagation(); navigate(`/groups/${s.group_id}`) }}
+                      className="text-blue-600 hover:underline cursor-pointer"
+                    >
+                      {groupNames[s.group_id] ?? `#${s.group_id}`}
+                    </button>
+                  </td>
                   <td className="px-6 py-3 text-right">
                     {s.is_active
                       ? <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Активен</span>

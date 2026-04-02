@@ -21,10 +21,15 @@ import AnalyticsPage from './pages/teacher/AnalyticsPage'
 // Admin
 import StudentsPage from './pages/admin/StudentsPage'
 import TeachersPage from './pages/admin/TeachersPage'
+import TeacherDetailPage from './pages/admin/TeacherDetailPage'
 import GroupsPage from './pages/admin/GroupsPage'
+import GroupDetailPage from './pages/admin/GroupDetailPage'
+import StudentDetailPage from './pages/admin/StudentDetailPage'
+import AssignmentPage from './pages/admin/AssignmentPage'
 import SubjectsPage from './pages/admin/SubjectsPage'
 import UsersPage from './pages/admin/UsersPage'
 import DepartmentsPage from './pages/admin/DepartmentsPage'
+import DepartmentDetailPage from './pages/admin/DepartmentDetailPage'
 
 export default function App() {
   const fetchMe = useAuthStore((s) => s.fetchMe)
@@ -59,11 +64,16 @@ export default function App() {
 
                   {/* Admin */}
                   <Route path="/students" element={<StudentsPage />} />
+                  <Route path="/students/:id" element={<StudentDetailPage />} />
                   <Route path="/teachers" element={<TeachersPage />} />
+                  <Route path="/teachers/:id" element={<TeacherDetailPage />} />
                   <Route path="/groups" element={<GroupsPage />} />
+                  <Route path="/groups/:id" element={<GroupDetailPage />} />
+                  <Route path="/assignments/:id" element={<AssignmentPage />} />
                   <Route path="/subjects" element={<SubjectsPage />} />
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/departments" element={<DepartmentsPage />} />
+                  <Route path="/departments/:id" element={<DepartmentDetailPage />} />
 
                   <Route path="*" element={<Navigate to="/dashboard" replace />} />
                 </Routes>

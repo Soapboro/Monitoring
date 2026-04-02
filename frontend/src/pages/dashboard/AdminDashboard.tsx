@@ -140,7 +140,7 @@ export default function AdminDashboard() {
               {sorted.map((s, i) => (
                 <tr
                   key={s.id}
-                  onClick={() => navigate('/students')}
+                  onClick={() => navigate(`/students/${s.id}`)}
                   className="hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   <td className="px-6 py-3 text-slate-400 font-medium">{i + 1}</td>

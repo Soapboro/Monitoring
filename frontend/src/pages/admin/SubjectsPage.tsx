@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getSubjects } from '../../api/resources'
 
-interface Subject { id: number; name: string; hours_total?: number; control_form?: string }
+interface Subject { id: number; name: string; code?: string | null; hours_total?: number }
 
 export default function SubjectsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([])
@@ -38,16 +38,16 @@ export default function SubjectsPage() {
             <thead className="bg-slate-50">
               <tr>
                 <th className="text-left px-6 py-3 text-slate-500 font-medium">Название</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">Часов</th>
-                <th className="text-right px-6 py-3 text-slate-500 font-medium">Форма контроля</th>
+                <th className="text-left px-4 py-3 text-slate-500 font-medium">Код</th>
+                <th className="text-right px-6 py-3 text-slate-500 font-medium">Часов</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filtered.map(s => (
                 <tr key={s.id} className="hover:bg-slate-50">
                   <td className="px-6 py-3 text-slate-800 font-medium">{s.name}</td>
-                  <td className="px-4 py-3 text-right text-slate-500">{s.hours_total ?? '—'}</td>
-                  <td className="px-6 py-3 text-right text-slate-500">{s.control_form ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-400 font-mono text-xs">{s.code ?? '—'}</td>
+                  <td className="px-6 py-3 text-right text-slate-500">{s.hours_total ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

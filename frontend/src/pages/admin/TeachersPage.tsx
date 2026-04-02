@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getTeachers } from '../../api/resources'
 import type { TeacherProfile } from '../../api/resources'
 
 export default function TeachersPage() {
+  const navigate = useNavigate()
   const [teachers, setTeachers] = useState<TeacherProfile[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -46,12 +48,19 @@ export default function TeachersPage() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filtered.map(t => (
-                <tr key={t.id} className="hover:bg-slate-50">
-                  <td className="px-6 py-3 text-slate-800 font-medium">
+                <tr
+                  key={t.id}
+                  onClick={() => navigate(`/teachers/${t.id}`)}
+                  className="hover:bg-blue-50 cursor-pointer transition-colors"
+                >
+                  <td className="px-6 py-3 text-slate-800 font-medium flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+                      <span className="text-xs font-semibold text-purple-600">{t.last_name[0]}</span>
+                    </div>
                     {t.last_name} {t.first_name} {t.middle_name ?? ''}
                   </td>
                   <td className="px-4 py-3 text-slate-500">{t.position ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-500">{('phone' in t ? (t as any).phone : null) ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-500">{t.phone ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
