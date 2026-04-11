@@ -7,6 +7,7 @@ class TeachingAssignmentCreate(BaseModel):
     group_id: int
     semester: int
     acad_year: str
+    control_form: str | None = None
 
 
 class TeachingAssignmentUpdate(BaseModel):
@@ -15,6 +16,7 @@ class TeachingAssignmentUpdate(BaseModel):
     group_id: int | None = None
     semester: int | None = None
     acad_year: str | None = None
+    control_form: str | None = None
 
 
 class TeachingAssignmentOut(BaseModel):
@@ -24,5 +26,6 @@ class TeachingAssignmentOut(BaseModel):
     group_id: int
     semester: int
     acad_year: str
+    control_form: str | None = None
 
     model_config = {"from_attributes": True}

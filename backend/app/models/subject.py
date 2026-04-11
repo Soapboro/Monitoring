@@ -12,7 +12,6 @@ class Subject(Base):
     name: Mapped[str] = mapped_column(String(300), nullable=False)
     code: Mapped[str | None] = mapped_column(String(30), nullable=True)
     hours_total: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
-    control_form: Mapped[str | None] = mapped_column(String(100), nullable=True)
     department_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 

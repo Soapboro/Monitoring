@@ -59,6 +59,24 @@ async def get_assignment(
     return ta
 
 
+@router.patch("/{ta_id}", response_model=TeachingAssignmentOut)
+async def update_assignment(
+    ta_id: int,
+    data: TeachingAssignmentUpdate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    result = await db.execute(select(TeachingAssignment).where(TeachingAssignment.id == ta_id))
+    ta = result.scalar_one_or_none()
+    if not ta:
+        raise HTTPException(status_code=404, detail="Назначение не найдено")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(ta, field, value)
+    await db.commit()
+    await db.refresh(ta)
+    return ta
+
+
 @router.delete("/{ta_id}", status_code=204)
 async def delete_assignment(
     ta_id: int,

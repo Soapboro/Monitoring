@@ -1,3 +1,5 @@
 Администратор:  admin@test.ru     / admin1234  
 Преподаватель:  teacher@test.ru   / teacher1234
 Студент:        student@test.ru   / student1234
+
+uvicorn app.main:app --reload

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { getMySessions } from '../../api/resources'
 import type { TestSession } from '../../api/resources'
+import { useSort } from '../../hooks/useSort'
+import SortableHeader from '../../components/SortableHeader'
 
 const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
   completed: { label: 'Завершён', cls: 'bg-emerald-100 text-emerald-700' },
@@ -10,34 +12,56 @@ const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
 
 export default function MyTestsPage() {
   const [sessions, setSessions] = useState<TestSession[]>([])
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     getMySessions().then(setSessions).finally(() => setLoading(false))
   }, [])
 
+  const filtered = sessions.filter(s => {
+    const st = STATUS_LABELS[s.status]?.label ?? s.status
+    return `${s.started_at.slice(0, 10)} ${st}`.toLowerCase().includes(search.toLowerCase())
+  })
+
+  const { sorted, sortKey, sortDir, toggleSort } = useSort(filtered, (s, key) => {
+    if (key === 'date') return s.started_at
+    if (key === 'status') return STATUS_LABELS[s.status]?.label ?? s.status
+    if (key === 'score') return s.score_total ?? -1
+    if (key === 'pct') {
+      if (!s.score_max || s.score_max === 0) return -1
+      return Math.round((s.score_total ?? 0) / s.score_max * 100)
+    }
+    return ''
+  })
+
   if (loading) return <Spinner />
 
   return (
     <div className="p-8 max-w-4xl">
-      <h1 className="text-2xl font-semibold text-slate-800 mb-1">Мои тесты</h1>
-      <p className="text-slate-400 text-sm mb-6">История прохождения тестов</p>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-2xl font-semibold text-slate-800">Мои тесты</h1>
+        <input type="text" placeholder="Поиск по дате или статусу..."
+          value={search} onChange={e => setSearch(e.target.value)}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-2 w-56 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      </div>
+      <p className="text-slate-400 text-sm mb-6">История прохождения тестов · Всего: {sessions.length}</p>
 
-      {sessions.length === 0 ? (
-        <Empty text="Тестов пока нет" />
+      {sorted.length === 0 ? (
+        <Empty text={sessions.length === 0 ? 'Тестов пока нет' : 'Ничего не найдено'} />
       ) : (
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="text-left px-6 py-3 text-slate-500 font-medium">Дата</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">Статус</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">Баллы</th>
-                <th className="text-right px-6 py-3 text-slate-500 font-medium">Результат</th>
+                <SortableHeader label="Дата" sortKey="date" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="px-6" />
+                <SortableHeader label="Статус" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Баллы" sortKey="score" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                <SortableHeader label="Результат" sortKey="pct" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="px-6" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {sessions.map(s => {
+              {sorted.map(s => {
                 const pct = s.score_max && s.score_max > 0
                   ? Math.round((s.score_total ?? 0) / s.score_max * 100)
                   : null

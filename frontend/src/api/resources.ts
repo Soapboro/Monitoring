@@ -29,6 +29,7 @@ export interface TeachingAssignment {
   subject_id: number
   acad_year: string
   semester: number
+  control_form: string | null
 }
 
 export interface GradeOut {
@@ -49,7 +50,6 @@ export interface Subject {
   name: string
   code: string | null
   hours_total: number | null
-  control_form: string | null
   department_id: number | null
 }
 
@@ -136,10 +136,15 @@ export const updateDepartment = (id: number, data: { name?: string; code?: strin
 export const deleteDepartment = (id: number) => client.delete(`/departments/${id}`)
 
 // Subject CRUD
-export const createSubject = (data: { name: string; code?: string; hours_total?: number; control_form?: string; department_id?: number }) =>
+export const createSubject = (data: { name: string; code?: string; hours_total?: number; department_id?: number }) =>
   client.post<Subject>('/subjects', data).then(r => r.data)
-export const updateSubject = (id: number, data: { name?: string; code?: string; hours_total?: number; control_form?: string; department_id?: number | null }) =>
+export const updateSubject = (id: number, data: { name?: string; code?: string; hours_total?: number; department_id?: number | null }) =>
   client.patch<Subject>(`/subjects/${id}`, data).then(r => r.data)
+export const updateAssignment = (id: number, data: { control_form?: string | null }) =>
+  client.patch<TeachingAssignment>(`/teaching-assignments/${id}`, data).then(r => r.data)
+export const createAssignment = (data: { teacher_id: number; subject_id: number; group_id: number; semester: number; acad_year: string; control_form?: string }) =>
+  client.post<TeachingAssignment>('/teaching-assignments', data).then(r => r.data)
+export const deleteAssignment = (id: number) => client.delete(`/teaching-assignments/${id}`)
 export const deleteSubject = (id: number) => client.delete(`/subjects/${id}`)
 
 // Group CRUD

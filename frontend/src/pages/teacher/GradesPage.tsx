@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { getMyTeacherProfile, getAssignments } from '../../api/resources'
 import client from '../../api/client'
 import type { GradeOut, StudentProfile, TeachingAssignment, Subject } from '../../api/resources'
+import { useSort } from '../../hooks/useSort'
+import SortableHeader from '../../components/SortableHeader'
 
 interface EnrichedGrade extends GradeOut {
   studentName: string
@@ -109,6 +111,15 @@ export default function GradesPage() {
     })
   }, [grades, search, subjectFilter, typeFilter, valueFilter])
 
+  const { sorted, sortKey, sortDir, toggleSort } = useSort(filtered, (g, key) => {
+    if (key === 'date') return g.date_recorded
+    if (key === 'student') return g.studentName
+    if (key === 'subject') return g.subjectName
+    if (key === 'type') return gradeTypeLabel(g.grade_type)
+    if (key === 'value') return g.value ?? (g.passed === true ? 1 : g.passed === false ? 0 : -1)
+    return ''
+  })
+
   const toggle = (id: number) => setExpanded(prev => (prev === id ? null : id))
 
   const hasFilters = search || subjectFilter !== 'all' || typeFilter !== 'all' || valueFilter !== 'all'
@@ -197,16 +208,16 @@ export default function GradesPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="text-left px-6 py-3 text-slate-500 font-medium">Дата</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">Студент</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">Предмет</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">Тип</th>
-                <th className="text-right px-6 py-3 text-slate-500 font-medium">Оценка</th>
+                <SortableHeader label="Дата" sortKey="date" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="px-6" />
+                <SortableHeader label="Студент" sortKey="student" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Предмет" sortKey="subject" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Тип" sortKey="type" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Оценка" sortKey="value" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="px-6" />
                 <th className="w-8" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.map(g => (
+              {sorted.map(g => (
                 <>
                   <tr
                     key={g.id}

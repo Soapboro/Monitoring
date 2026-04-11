@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import client from '../../api/client'
 import type { TeachingAssignment, Subject, StudentProfile, GradeOut, AttendanceRecord, TeacherProfile } from '../../api/resources'
+import { updateAssignment } from '../../api/resources'
+import { useSort } from '../../hooks/useSort'
+import SortableHeader from '../../components/SortableHeader'
+
+const CONTROL_FORMS = ['Экзамен', 'Зачёт', 'Дифференцированный зачёт', 'Контрольная работа', 'Курсовая работа', 'Реферат']
 
 type Tab = 'grades' | 'attendance'
 
@@ -32,6 +37,9 @@ export default function AssignmentPage() {
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [expandedStudent, setExpandedStudent] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [editControlForm, setEditControlForm] = useState(false)
+  const [controlFormValue, setControlFormValue] = useState('')
+  const [savingCF, setSavingCF] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -39,6 +47,7 @@ export default function AssignmentPage() {
       try {
         const a = await client.get<TeachingAssignment>(`/teaching-assignments/${id}`).then(r => r.data)
         setAssignment(a)
+        setControlFormValue(a.control_form ?? '')
 
         const [subj, grp, t, studs, gr, att] = await Promise.all([
           client.get<Subject>(`/subjects/${a.subject_id}`).then(r => r.data).catch(() => null),
@@ -64,10 +73,6 @@ export default function AssignmentPage() {
     init()
   }, [id])
 
-  if (loading) return <Spinner />
-  if (!assignment) return <div className="p-8 text-slate-400">Назначение не найдено</div>
-
-  const teacherName = teacher ? `${teacher.last_name} ${teacher.first_name}` : ''
   const studentMap: Record<number, StudentProfile> = {}
   for (const s of students) studentMap[s.id] = s
 
@@ -92,6 +97,34 @@ export default function AssignmentPage() {
     if (!gradesByStudent[g.student_id]) gradesByStudent[g.student_id] = []
     gradesByStudent[g.student_id].push(g)
   }
+
+  const studentGradeRows = Object.entries(gradesByStudent).map(([sid, sGrades]) => ({
+    sid: Number(sid), sGrades,
+  }))
+
+  const { sorted: sortedStudents, sortKey: gradesSortKey, sortDir: gradesSortDir, toggleSort: gradesToggleSort } = useSort(studentGradeRows, (row, key) => {
+    const s = studentMap[row.sid]
+    if (key === 'student') return s ? `${s.last_name} ${s.first_name}` : `Студент #${row.sid}`
+    if (key === 'count') return row.sGrades.length
+    if (key === 'avg') {
+      const nums = row.sGrades.filter(g => g.value !== null)
+      return nums.length > 0 ? nums.reduce((s, g) => s + (g.value ?? 0), 0) / nums.length : -1
+    }
+    return ''
+  })
+
+  const { sorted: sortedDates, sortKey: attSortKey, sortDir: attSortDir, toggleSort: attToggleSort } = useSort(dateRows, (row, key) => {
+    if (key === 'date') return row.date
+    if (key === 'total') return row.total
+    if (key === 'present') return row.present
+    if (key === 'rate') return row.total > 0 ? Math.round(row.present / row.total * 100) : -1
+    return ''
+  })
+
+  if (loading) return <Spinner />
+  if (!assignment) return <div className="p-8 text-slate-400">Назначение не найдено</div>
+
+  const teacherName = teacher ? `${teacher.last_name} ${teacher.first_name}` : ''
 
   const totalPresent = attendance.filter(r => r.is_present).length
   const attendanceRate = attendance.length > 0 ? Math.round(totalPresent / attendance.length * 100) : null
@@ -139,7 +172,43 @@ export default function AssignmentPage() {
                 </>
               )}
               <span>· {assignment.acad_year}, сем. {assignment.semester}</span>
-              {subject?.control_form && <span>· {subject.control_form}</span>}
+              {editControlForm ? (
+                <span className="flex items-center gap-1.5">
+                  ·
+                  <select
+                    value={controlFormValue}
+                    onChange={e => setControlFormValue(e.target.value)}
+                    className="border border-slate-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">— не указана —</option>
+                    {CONTROL_FORMS.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                  <button
+                    onClick={async () => {
+                      setSavingCF(true)
+                      const updated = await updateAssignment(assignment.id, { control_form: controlFormValue || null })
+                      setAssignment(updated)
+                      setEditControlForm(false)
+                      setSavingCF(false)
+                    }}
+                    disabled={savingCF}
+                    className="text-xs text-blue-600 hover:underline disabled:opacity-50"
+                  >
+                    Сохранить
+                  </button>
+                  <button onClick={() => setEditControlForm(false)} className="text-xs text-slate-400 hover:text-slate-600">
+                    Отмена
+                  </button>
+                </span>
+              ) : (
+                <span
+                  onClick={() => setEditControlForm(true)}
+                  className="cursor-pointer hover:text-blue-600 transition-colors"
+                  title="Изменить форму контроля"
+                >
+                  · {assignment.control_form ?? <span className="text-slate-300">форма контроля не указана</span>}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -181,25 +250,25 @@ export default function AssignmentPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="text-left px-6 py-3 text-slate-500 font-medium">Студент</th>
-                    <th className="text-right px-4 py-3 text-slate-500 font-medium">Оценок</th>
-                    <th className="text-right px-4 py-3 text-slate-500 font-medium">Ср. балл</th>
+                    <SortableHeader label="Студент" sortKey="student" currentKey={gradesSortKey} dir={gradesSortDir} onSort={gradesToggleSort} className="px-6" />
+                    <SortableHeader label="Оценок" sortKey="count" currentKey={gradesSortKey} dir={gradesSortDir} onSort={gradesToggleSort} align="right" />
+                    <SortableHeader label="Ср. балл" sortKey="avg" currentKey={gradesSortKey} dir={gradesSortDir} onSort={gradesToggleSort} align="right" />
                     <th className="w-8" />
                   </tr>
                 </thead>
                 <tbody>
-                  {Object.entries(gradesByStudent).map(([sid, sGrades]) => {
-                    const student = studentMap[Number(sid)]
+                  {sortedStudents.map(({ sid, sGrades }) => {
+                    const student = studentMap[sid]
                     const nums = sGrades.filter(g => g.value !== null)
                     const avg = nums.length > 0
                       ? (nums.reduce((s, g) => s + (g.value ?? 0), 0) / nums.length).toFixed(2)
                       : null
-                    const isOpen = expandedStudent === Number(sid)
+                    const isOpen = expandedStudent === sid
                     return (
                       <>
                         <tr
                           key={sid}
-                          onClick={() => setExpandedStudent(isOpen ? null : Number(sid))}
+                          onClick={() => setExpandedStudent(isOpen ? null : sid)}
                           className="border-t border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors"
                         >
                           <td className="px-6 py-3">
@@ -210,6 +279,7 @@ export default function AssignmentPage() {
                               {student ? `${student.last_name} ${student.first_name}${student.middle_name ? ' ' + student.middle_name : ''}` : `Студент #${sid}`}
                             </button>
                           </td>
+
                           <td className="px-4 py-3 text-right text-slate-500">{sGrades.length}</td>
                           <td className="px-4 py-3 text-right">
                             {avg !== null ? (
@@ -272,14 +342,14 @@ export default function AssignmentPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="text-left px-6 py-3 text-slate-500 font-medium">Дата</th>
-                    <th className="text-right px-4 py-3 text-slate-500 font-medium">Всего</th>
-                    <th className="text-right px-4 py-3 text-slate-500 font-medium">Присутствовало</th>
-                    <th className="text-right px-6 py-3 text-slate-500 font-medium">%</th>
+                    <SortableHeader label="Дата" sortKey="date" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} className="px-6" />
+                    <SortableHeader label="Всего" sortKey="total" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} align="right" />
+                    <SortableHeader label="Присутствовало" sortKey="present" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} align="right" />
+                    <SortableHeader label="%" sortKey="rate" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} align="right" className="px-6" />
                   </tr>
                 </thead>
                 <tbody>
-                  {dateRows.map(row => {
+                  {sortedDates.map(row => {
                     const rate = Math.round(row.present / row.total * 100)
                     const isOpen = expandedDate === row.date
                     return (

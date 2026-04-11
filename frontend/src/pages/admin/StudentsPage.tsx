@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getStudents, getGroups } from '../../api/resources'
 import type { StudentProfile } from '../../api/resources'
+import { useSort } from '../../hooks/useSort'
+import SortableHeader from '../../components/SortableHeader'
 
 export default function StudentsPage() {
   const navigate = useNavigate()
@@ -24,6 +26,14 @@ export default function StudentsPage() {
     return full.includes(search.toLowerCase())
   })
 
+  const { sorted, sortKey, sortDir, toggleSort } = useSort(filtered, (s, key) => {
+    if (key === 'name') return `${s.last_name} ${s.first_name}`
+    if (key === 'student_num') return s.student_num ?? ''
+    if (key === 'group') return groupNames[s.group_id] ?? ''
+    if (key === 'status') return s.is_active
+    return ''
+  })
+
   if (loading) return <Spinner />
 
   return (
@@ -42,19 +52,19 @@ export default function StudentsPage() {
         />
       </div>
 
-      {filtered.length === 0 ? <Empty text="Ничего не найдено" /> : (
+      {sorted.length === 0 ? <Empty text="Ничего не найдено" /> : (
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="text-left px-6 py-3 text-slate-500 font-medium">ФИО</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">№ студ.</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">Группа</th>
-                <th className="text-right px-6 py-3 text-slate-500 font-medium">Статус</th>
+                <SortableHeader label="ФИО" sortKey="name" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="px-6" />
+                <SortableHeader label="№ студ." sortKey="student_num" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Группа" sortKey="group" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Статус" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="px-6" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filtered.map(s => (
+              {sorted.map(s => (
                 <tr
                   key={s.id}
                   onClick={() => navigate(`/students/${s.id}`)}
@@ -68,18 +78,15 @@ export default function StudentsPage() {
                   </td>
                   <td className="px-4 py-3 text-slate-500">{s.student_num ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-500">
-                    <button
-                      onClick={e => { e.stopPropagation(); navigate(`/groups/${s.group_id}`) }}
-                      className="text-blue-600 hover:underline cursor-pointer"
-                    >
+                    <button onClick={e => { e.stopPropagation(); navigate(`/groups/${s.group_id}`) }}
+                      className="text-blue-600 hover:underline cursor-pointer">
                       {groupNames[s.group_id] ?? `#${s.group_id}`}
                     </button>
                   </td>
                   <td className="px-6 py-3 text-right">
                     {s.is_active
                       ? <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Активен</span>
-                      : <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">Неактивен</span>
-                    }
+                      : <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">Неактивен</span>}
                   </td>
                 </tr>
               ))}
@@ -92,12 +99,7 @@ export default function StudentsPage() {
 }
 
 function Spinner() {
-  return (
-    <div className="p-8 flex items-center gap-3 text-slate-400">
-      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      Загрузка...
-    </div>
-  )
+  return <div className="p-8 flex items-center gap-3 text-slate-400"><div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />Загрузка...</div>
 }
 function Empty({ text }: { text: string }) {
   return <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 shadow-sm">{text}</div>

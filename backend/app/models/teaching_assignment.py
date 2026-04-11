@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, SmallInteger, String, ForeignKey, UniqueConstraint, CheckConstraint
+from sqlalchemy import Integer, SmallInteger, String, ForeignKey, UniqueConstraint, CheckConstraint, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -17,6 +17,7 @@ class TeachingAssignment(Base):
     group_id: Mapped[int] = mapped_column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
     semester: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     acad_year: Mapped[str] = mapped_column(String(9), nullable=False)
+    control_form: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     teacher: Mapped["Teacher"] = relationship("Teacher", back_populates="teaching_assignments")
     subject: Mapped["Subject"] = relationship("Subject", back_populates="teaching_assignments")

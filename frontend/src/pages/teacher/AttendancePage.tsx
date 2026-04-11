@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { getMyTeacherProfile, getAssignments } from '../../api/resources'
 import client from '../../api/client'
 import type { TeachingAssignment } from '../../api/resources'
+import { useSort } from '../../hooks/useSort'
+import SortableHeader from '../../components/SortableHeader'
 
 interface AttendanceOut {
   id: number; student_id: number; assignment_id: number
@@ -130,10 +132,19 @@ export default function AttendancePage() {
     })
   }, [dateRows, search, subjectFilter, rateFilter, assignmentSubjectMap])
 
+  const { sorted: sortedRows, sortKey, sortDir, toggleSort } = useSort(filtered, (row, key) => {
+    if (key === 'date') return row.date
+    if (key === 'subjects') return row.subjectNames.join(', ')
+    if (key === 'total') return row.total
+    if (key === 'present') return row.present
+    if (key === 'rate') return row.total > 0 ? Math.round(row.present / row.total * 100) : -1
+    return ''
+  })
+
   if (loading) return <Spinner />
 
-  const totalPresent = filtered.reduce((s, r) => s + r.present, 0)
-  const totalAll = filtered.reduce((s, r) => s + r.total, 0)
+  const totalPresent = sortedRows.reduce((s, r) => s + r.present, 0)
+  const totalAll = sortedRows.reduce((s, r) => s + r.total, 0)
   const avgRate = totalAll > 0 ? Math.round(totalPresent / totalAll * 100) : null
 
   return (
@@ -203,20 +214,20 @@ export default function AttendancePage() {
         )}
       </div>
 
-      {filtered.length === 0 ? <Empty text="Ничего не найдено" /> : (
+      {sortedRows.length === 0 ? <Empty text="Ничего не найдено" /> : (
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
               <tr>
-                <th className="text-left px-6 py-3 text-slate-500 font-medium">Дата</th>
-                <th className="text-left px-4 py-3 text-slate-500 font-medium">Предмет(ы)</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">Всего</th>
-                <th className="text-right px-4 py-3 text-slate-500 font-medium">Присутствовало</th>
-                <th className="text-right px-6 py-3 text-slate-500 font-medium">%</th>
+                <SortableHeader label="Дата" sortKey="date" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="px-6" />
+                <SortableHeader label="Предмет(ы)" sortKey="subjects" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Всего" sortKey="total" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                <SortableHeader label="Присутствовало" sortKey="present" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                <SortableHeader label="%" sortKey="rate" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="px-6" />
               </tr>
             </thead>
             <tbody>
-              {filtered.map(row => {
+              {sortedRows.map(row => {
                 const rate = Math.round(row.present / row.total * 100)
                 const absent = row.records.filter(r => !r.is_present)
                 const isOpen = expandedDate === row.date
