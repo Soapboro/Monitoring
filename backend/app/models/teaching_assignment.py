@@ -23,3 +23,4 @@ class TeachingAssignment(Base):
     group: Mapped["Group"] = relationship("Group", back_populates="teaching_assignments")
     grades: Mapped[list["Grade"]] = relationship("Grade", back_populates="assignment")
     attendance: Mapped[list["Attendance"]] = relationship("Attendance", back_populates="assignment")
+    lessons: Mapped[list["Lesson"]] = relationship("Lesson", back_populates="assignment")

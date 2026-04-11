@@ -11,6 +11,7 @@ from .test import Test, TestStatus, TestQuestion, TestAssignment
 from .test_session import TestSession, SessionStatus, QuestionAnswer
 from .grade import Grade, GradeType
 from .attendance import Attendance
+from .lesson import Lesson, LessonType
 from .adaptive import AdaptiveRecommendation
 from .notification import Notification, NotifType
 from .audit_log import AuditLog
@@ -29,6 +30,7 @@ __all__ = [
     "TestSession", "SessionStatus", "QuestionAnswer",
     "Grade", "GradeType",
     "Attendance",
+    "Lesson", "LessonType",
     "AdaptiveRecommendation",
     "Notification", "NotifType",
     "AuditLog",

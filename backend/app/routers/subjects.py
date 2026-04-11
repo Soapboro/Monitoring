@@ -61,7 +61,7 @@ async def update_subject(
     subject = result.scalar_one_or_none()
     if not subject:
         raise HTTPException(status_code=404, detail="Дисциплина не найдена")
-    for field, value in data.model_dump(exclude_none=True).items():
+    for field, value in data.model_dump(exclude_unset=True).items():
         setattr(subject, field, value)
     await db.commit()
     await db.refresh(subject)

@@ -18,6 +18,7 @@ class TeacherUpdate(BaseModel):
     middle_name: str | None = None
     position: str | None = None
     phone: str | None = None
+    department_id: int | None = None
 
 
 class TeacherOut(BaseModel):
@@ -28,6 +29,7 @@ class TeacherOut(BaseModel):
     middle_name: str | None
     position: str | None
     phone: str | None
+    department_id: int | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

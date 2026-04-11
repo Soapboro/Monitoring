@@ -15,9 +15,11 @@ class Teacher(Base):
     middle_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     position: Mapped[str | None] = mapped_column(String(200), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    department_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     user: Mapped["User"] = relationship("User", back_populates="teacher")
+    department: Mapped["Department | None"] = relationship("Department", back_populates="teachers")
     teaching_assignments: Mapped[list["TeachingAssignment"]] = relationship("TeachingAssignment", back_populates="teacher")
     questions: Mapped[list["Question"]] = relationship("Question", back_populates="author")
     tests: Mapped[list["Test"]] = relationship("Test", back_populates="author")

@@ -6,11 +6,16 @@ from app.config import settings
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
+    pw = plain_password.encode("utf-8")
+    hashed = hashed_password.encode("utf-8") if isinstance(hashed_password, str) else hashed_password
+    try:
+        return bcrypt.checkpw(pw, hashed)
+    except Exception:
+        return False
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def create_access_token(data: dict) -> str:

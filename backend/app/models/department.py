@@ -16,3 +16,4 @@ class Department(Base):
 
     groups: Mapped[list["Group"]] = relationship("Group", back_populates="department")
     subjects: Mapped[list["Subject"]] = relationship("Subject", back_populates="department")
+    teachers: Mapped[list["Teacher"]] = relationship("Teacher", back_populates="department")

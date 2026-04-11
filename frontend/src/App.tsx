@@ -17,6 +17,8 @@ import GradesPage from './pages/teacher/GradesPage'
 import AttendancePage from './pages/teacher/AttendancePage'
 import TestsPage from './pages/teacher/TestsPage'
 import AnalyticsPage from './pages/teacher/AnalyticsPage'
+import LessonsPage from './pages/teacher/LessonsPage'
+import LessonDetailPage from './pages/teacher/LessonDetailPage'
 
 // Admin
 import StudentsPage from './pages/admin/StudentsPage'
@@ -57,6 +59,8 @@ export default function App() {
                   <Route path="/my-adaptive" element={<MyAdaptivePage />} />
 
                   {/* Teacher */}
+                  <Route path="/lessons" element={<LessonsPage />} />
+                  <Route path="/lessons/:id" element={<LessonDetailPage />} />
                   <Route path="/grades" element={<GradesPage />} />
                   <Route path="/attendance" element={<AttendancePage />} />
                   <Route path="/tests" element={<TestsPage />} />

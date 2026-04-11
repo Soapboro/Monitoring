@@ -16,6 +16,7 @@ from app.routers import (
     test_sessions,
     grades,
     attendance,
+    lessons,
     analytics,
     reports,
     notifications,
@@ -49,6 +50,7 @@ app.include_router(tests.router)
 app.include_router(test_sessions.router)
 app.include_router(grades.router)
 app.include_router(attendance.router)
+app.include_router(lessons.router)
 app.include_router(analytics.router)
 app.include_router(reports.router)
 app.include_router(notifications.router)

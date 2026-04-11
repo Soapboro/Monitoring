@@ -27,10 +27,14 @@ async def get_my_profile(
 
 @router.get("", response_model=list[TeacherOut])
 async def list_teachers(
+    department_id: int | None = None,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_teacher),
 ):
-    result = await db.execute(select(Teacher).order_by(Teacher.last_name))
+    query = select(Teacher).order_by(Teacher.last_name)
+    if department_id is not None:
+        query = query.where(Teacher.department_id == department_id)
+    result = await db.execute(query)
     return result.scalars().all()
 
 
@@ -86,7 +90,7 @@ async def update_teacher(
     teacher = result.scalar_one_or_none()
     if not teacher:
         raise HTTPException(status_code=404, detail="Преподаватель не найден")
-    for field, value in data.model_dump(exclude_none=True).items():
+    for field, value in data.model_dump(exclude_unset=True).items():
         setattr(teacher, field, value)
     await db.commit()
     await db.refresh(teacher)
