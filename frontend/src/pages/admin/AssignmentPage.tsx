@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import client from '../../api/client'
 import type { TeachingAssignment, Subject, StudentProfile, GradeOut, AttendanceRecord, TeacherProfile } from '../../api/resources'
 import { updateAssignment } from '../../api/resources'
@@ -25,6 +25,7 @@ const GRADE_TYPE_LABELS: Record<string, string> = {
 export default function AssignmentPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const [assignment, setAssignment] = useState<TeachingAssignment | null>(null)
   const [subject, setSubject] = useState<Subject | null>(null)
@@ -33,7 +34,8 @@ export default function AssignmentPage() {
   const [students, setStudents] = useState<StudentProfile[]>([])
   const [grades, setGrades] = useState<GradeOut[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
-  const [tab, setTab] = useState<Tab>('grades')
+  const initialTab = (searchParams.get('tab') as Tab | null) ?? 'grades'
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [expandedStudent, setExpandedStudent] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)

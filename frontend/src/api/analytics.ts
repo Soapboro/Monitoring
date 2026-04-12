@@ -81,9 +81,35 @@ export async function getGroupAttendanceBySubject(groupId: number): Promise<Atte
   return data
 }
 
-export async function getTopStudents(groupId?: number, limit = 10): Promise<TopStudent[]> {
+export interface GroupRatingRow {
+  id: number
+  group: string
+  avg_grade: number
+  students_count: number
+  grades_count: number
+}
+
+export interface SubjectRatingRow {
+  id: number
+  subject: string
+  avg_grade: number
+  students_count: number
+  grades_count: number
+}
+
+export async function getTopStudents(groupId?: number, limit = 5000): Promise<TopStudent[]> {
   const params: Record<string, unknown> = { limit }
   if (groupId) params.group_id = groupId
   const { data } = await client.get('/analytics/top-students', { params })
+  return data
+}
+
+export async function getRatingByGroups(): Promise<GroupRatingRow[]> {
+  const { data } = await client.get('/analytics/rating/groups')
+  return data
+}
+
+export async function getRatingBySubjects(): Promise<SubjectRatingRow[]> {
+  const { data } = await client.get('/analytics/rating/subjects')
   return data
 }

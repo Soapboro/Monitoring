@@ -98,7 +98,7 @@ export default function TeacherDashboard() {
       label: 'Моих групп',
       value: groupIds.length,
       sub: null,
-      to: '/groups',
+      to: '/my-groups',
     },
     {
       label: 'Средний балл по группе',

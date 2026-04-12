@@ -217,7 +217,7 @@ async def group_attendance_by_subject(
 async def top_students(
     group_id: int | None = None,
     subject_id: int | None = None,
-    limit: int = Query(10, le=50),
+    limit: int = Query(10, le=5000),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_teacher),
 ):
@@ -242,6 +242,56 @@ async def top_students(
     if subject_id:
         query = query.where(TeachingAssignment.subject_id == subject_id)
 
+    result = await db.execute(query)
+    rows = result.mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.get("/rating/groups")
+async def rating_by_groups(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_teacher),
+):
+    """Рейтинг групп по среднему баллу."""
+    query = (
+        select(
+            Group.id,
+            Group.name.label("group"),
+            func.round(func.avg(Grade.value), 2).label("avg_grade"),
+            func.count(func.distinct(Grade.student_id)).label("students_count"),
+            func.count(Grade.id).label("grades_count"),
+        )
+        .join(TeachingAssignment, Grade.assignment_id == TeachingAssignment.id)
+        .join(Group, TeachingAssignment.group_id == Group.id)
+        .where(Grade.value.isnot(None))
+        .group_by(Group.id, Group.name)
+        .order_by(func.avg(Grade.value).desc())
+    )
+    result = await db.execute(query)
+    rows = result.mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.get("/rating/subjects")
+async def rating_by_subjects(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_teacher),
+):
+    """Рейтинг предметов по среднему баллу."""
+    query = (
+        select(
+            Subject.id,
+            Subject.name.label("subject"),
+            func.round(func.avg(Grade.value), 2).label("avg_grade"),
+            func.count(func.distinct(Grade.student_id)).label("students_count"),
+            func.count(Grade.id).label("grades_count"),
+        )
+        .join(TeachingAssignment, Grade.assignment_id == TeachingAssignment.id)
+        .join(Subject, TeachingAssignment.subject_id == Subject.id)
+        .where(Grade.value.isnot(None))
+        .group_by(Subject.id, Subject.name)
+        .order_by(func.avg(Grade.value).desc())
+    )
     result = await db.execute(query)
     rows = result.mappings().all()
     return [dict(r) for r in rows]

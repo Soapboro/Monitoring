@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import client from '../../api/client'
-import type { StudentProfile, GradeOut, AttendanceRecord, TestSession } from '../../api/resources'
+import type { StudentProfile, GradeOut, AttendanceRecord, TestSession, TeachingAssignment, Subject } from '../../api/resources'
+import { useAuthStore } from '../../store/authStore'
+import { getMyTeacherProfile, getAssignments } from '../../api/resources'
 
 interface SubjectData {
   id: number
   name: string
+  grades: GradeOut[]
+  attendance: AttendanceRecord[]
+}
+
+interface TeacherSubjectBlock {
+  assignment: TeachingAssignment
+  subject: Subject
   grades: GradeOut[]
   attendance: AttendanceRecord[]
 }
@@ -18,6 +27,8 @@ const GRADE_TYPE_LABELS: Record<string, string> = {
 export default function StudentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const currentUser = useAuthStore(s => s.user)
+  const isTeacher = currentUser?.role === 'teacher'
 
   const [student, setStudent] = useState<StudentProfile | null>(null)
   const [groupName, setGroupName] = useState('')
@@ -25,6 +36,7 @@ export default function StudentDetailPage() {
   const [sessions, setSessions] = useState<TestSession[]>([])
   const [expandedSubject, setExpandedSubject] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [teacherBlocks, setTeacherBlocks] = useState<TeacherSubjectBlock[]>([])
 
   useEffect(() => {
     if (!id) return
@@ -70,6 +82,34 @@ export default function StudentDetailPage() {
         const subjList = Object.values(subjectMap).sort((a, b) => a.name.localeCompare(b.name))
         setSubjects(subjList)
         if (subjList.length > 0) setExpandedSubject(subjList[0].id)
+
+        // Если текущий пользователь — преподаватель, загружаем его предметы по этому студенту
+        if (currentUser?.role === 'teacher') {
+          try {
+            const teacherProfile = await getMyTeacherProfile()
+            const teacherAssignments: TeachingAssignment[] = await getAssignments(teacherProfile.id)
+            // Оставляем только назначения для группы этого студента
+            const relevant = teacherAssignments.filter(a => a.group_id === s.group_id)
+            if (relevant.length > 0) {
+              const subjDetails = await Promise.all(
+                relevant.map(a =>
+                  client.get<Subject>(`/subjects/${a.subject_id}`).then(r => r.data).catch(() => null)
+                )
+              )
+              const blocks: TeacherSubjectBlock[] = relevant
+                .map((a, i) => {
+                  const subj = subjDetails[i]
+                  if (!subj) return null
+                  // Оценки этого студента по данному назначению
+                  const aGrades = gr.filter(g => g.assignment_id === a.id)
+                  const aAtt = att.filter(x => x.assignment_id === a.id)
+                  return { assignment: a, subject: subj, grades: aGrades, attendance: aAtt }
+                })
+                .filter(Boolean) as TeacherSubjectBlock[]
+              setTeacherBlocks(blocks)
+            }
+          } catch { /* silent */ }
+        }
       } catch {
         // silent
       } finally {
@@ -77,7 +117,7 @@ export default function StudentDetailPage() {
       }
     }
     init()
-  }, [id])
+  }, [id, currentUser?.role])
 
   if (loading) return <Spinner />
   if (!student) return <div className="p-8 text-slate-400">Студент не найден</div>
@@ -140,6 +180,145 @@ export default function StudentDetailPage() {
           <Stat label="Тестов пройдено" value={`${passedSessions.length} / ${sessions.length}`} />
         </div>
       </div>
+
+      {/* Блок преподавателя: что он преподаёт и как успевает студент */}
+      {isTeacher && teacherBlocks.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
+          <div className="flex items-center gap-2 mb-4">
+            <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+            </svg>
+            <h2 className="text-sm font-semibold text-blue-800">Ваши предметы у этого студента</h2>
+          </div>
+          <div className="space-y-3">
+            {teacherBlocks.map(({ assignment, subject, grades, attendance }) => {
+              const numericGrades = grades.filter(g => g.value !== null)
+              const avg = numericGrades.length > 0
+                ? (numericGrades.reduce((s, g) => s + (g.value ?? 0), 0) / numericGrades.length).toFixed(1)
+                : null
+              const present = attendance.filter(a => a.is_present).length
+              const attRate = attendance.length > 0 ? Math.round(present / attendance.length * 100) : null
+              const recentGrades = [...grades]
+                .sort((a, b) => b.date_recorded.localeCompare(a.date_recorded))
+                .slice(0, 5)
+
+              return (
+                <div key={assignment.id} className="bg-white rounded-lg border border-blue-100 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-slate-800 text-sm">{subject.name}</span>
+                      <span className="text-xs text-slate-400">{assignment.acad_year} · {assignment.semester} сем.</span>
+                      {assignment.control_form && (
+                        <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">{assignment.control_form}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => navigate(`/assignments/${assignment.id}?tab=grades`)}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                      >
+                        Все оценки
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                      <button
+                        onClick={() => navigate(`/assignments/${assignment.id}?tab=attendance`)}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer"
+                      >
+                        Посещаемость
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Успеваемость */}
+                    <div>
+                      <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wide">Успеваемость</p>
+                      {grades.length === 0 ? (
+                        <p className="text-xs text-slate-400">Оценок нет</p>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500">Средний балл:</span>
+                            {avg !== null ? (
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                Number(avg) >= 4 ? 'bg-emerald-100 text-emerald-700' :
+                                Number(avg) >= 3 ? 'bg-blue-100 text-blue-700' :
+                                'bg-red-100 text-red-700'
+                              }`}>{avg}</span>
+                            ) : <span className="text-xs text-slate-400">—</span>}
+                          </div>
+                          <p className="text-xs text-slate-400">{grades.length} оценок всего</p>
+                          {recentGrades.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {recentGrades.map(g => (
+                                <div key={g.id} className="flex items-center justify-between">
+                                  <span className="text-xs text-slate-400">{String(g.date_recorded).slice(0, 10)} · {GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}</span>
+                                  {g.value !== null ? (
+                                    <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold ${
+                                      g.value >= 4 ? 'bg-emerald-100 text-emerald-700' :
+                                      g.value >= 3 ? 'bg-blue-100 text-blue-700' :
+                                      'bg-red-100 text-red-700'
+                                    }`}>{g.value}</span>
+                                  ) : g.passed !== null ? (
+                                    <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold ${g.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                      {g.passed ? 'Зачёт' : 'Незачёт'}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ))}
+                              {grades.length > 5 && (
+                                <button
+                                  onClick={() => navigate(`/assignments/${assignment.id}?tab=grades`)}
+                                  className="text-xs text-blue-500 hover:text-blue-700 mt-1 transition-colors cursor-pointer"
+                                >
+                                  Ещё {grades.length - 5} оценок →
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {/* Посещаемость */}
+                    <div>
+                      <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wide">Посещаемость</p>
+                      {attendance.length === 0 ? (
+                        <p className="text-xs text-slate-400">Нет записей</p>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500">Процент:</span>
+                            {attRate !== null ? (
+                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                attRate >= 75 ? 'bg-emerald-100 text-emerald-700' :
+                                attRate >= 50 ? 'bg-amber-100 text-amber-700' :
+                                'bg-red-100 text-red-700'
+                              }`}>{attRate}%</span>
+                            ) : null}
+                          </div>
+                          <p className="text-xs text-slate-400">{present} из {attendance.length} занятий</p>
+                          {attRate !== null && (
+                            <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${attRate >= 75 ? 'bg-emerald-500' : attRate >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                                style={{ width: `${attRate}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Предметы */}
       <Section title="Предметы" subtitle={`${subjects.length} дисциплин`}>

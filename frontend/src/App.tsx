@@ -19,6 +19,7 @@ import TestsPage from './pages/teacher/TestsPage'
 import AnalyticsPage from './pages/teacher/AnalyticsPage'
 import LessonsPage from './pages/teacher/LessonsPage'
 import LessonDetailPage from './pages/teacher/LessonDetailPage'
+import MyGroupsPage from './pages/teacher/MyGroupsPage'
 
 // Admin
 import StudentsPage from './pages/admin/StudentsPage'
@@ -59,6 +60,7 @@ export default function App() {
                   <Route path="/my-adaptive" element={<MyAdaptivePage />} />
 
                   {/* Teacher */}
+                  <Route path="/my-groups" element={<MyGroupsPage />} />
                   <Route path="/lessons" element={<LessonsPage />} />
                   <Route path="/lessons/:id" element={<LessonDetailPage />} />
                   <Route path="/grades" element={<GradesPage />} />
