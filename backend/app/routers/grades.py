@@ -47,11 +47,9 @@ async def create_grade(
     current_user: User = Depends(require_teacher),
 ):
     teacher_id = await _teacher_id(current_user, db)
-    grade = Grade(
-        **data.model_dump(exclude_none=True),
-        recorded_by=teacher_id,
-        date_recorded=data.date_recorded or date.today(),
-    )
+    dump = data.model_dump(exclude_none=True)
+    dump.setdefault("date_recorded", date.today())
+    grade = Grade(**dump, recorded_by=teacher_id)
     db.add(grade)
     await db.commit()
     await db.refresh(grade)

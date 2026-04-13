@@ -10,16 +10,19 @@ import Layout from './components/Layout'
 import MyGradesPage from './pages/student/MyGradesPage'
 import MyAttendancePage from './pages/student/MyAttendancePage'
 import MyTestsPage from './pages/student/MyTestsPage'
+import TestPlayerPage from './pages/student/TestPlayerPage'
 import MyAdaptivePage from './pages/student/MyAdaptivePage'
 
 // Teacher
 import GradesPage from './pages/teacher/GradesPage'
 import AttendancePage from './pages/teacher/AttendancePage'
 import TestsPage from './pages/teacher/TestsPage'
+import TestEditorPage from './pages/teacher/TestEditorPage'
 import AnalyticsPage from './pages/teacher/AnalyticsPage'
 import LessonsPage from './pages/teacher/LessonsPage'
 import LessonDetailPage from './pages/teacher/LessonDetailPage'
 import MyGroupsPage from './pages/teacher/MyGroupsPage'
+import TeacherStudentPage from './pages/teacher/TeacherStudentPage'
 
 // Admin
 import StudentsPage from './pages/admin/StudentsPage'
@@ -33,6 +36,7 @@ import SubjectsPage from './pages/admin/SubjectsPage'
 import UsersPage from './pages/admin/UsersPage'
 import DepartmentsPage from './pages/admin/DepartmentsPage'
 import DepartmentDetailPage from './pages/admin/DepartmentDetailPage'
+import SchedulePage from './pages/admin/SchedulePage'
 
 export default function App() {
   const fetchMe = useAuthStore((s) => s.fetchMe)
@@ -45,6 +49,11 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* Плеер — без сайдбара */}
+        <Route path="/my-tests/session/:sessionId" element={
+          <ProtectedRoute><TestPlayerPage /></ProtectedRoute>
+        } />
+
         <Route
           path="/*"
           element={
@@ -66,9 +75,12 @@ export default function App() {
                   <Route path="/grades" element={<GradesPage />} />
                   <Route path="/attendance" element={<AttendancePage />} />
                   <Route path="/tests" element={<TestsPage />} />
+                  <Route path="/tests/:id" element={<TestEditorPage />} />
                   <Route path="/analytics" element={<AnalyticsPage />} />
+                  <Route path="/my-students/:id" element={<TeacherStudentPage />} />
 
                   {/* Admin */}
+                  <Route path="/schedule" element={<SchedulePage />} />
                   <Route path="/students" element={<StudentsPage />} />
                   <Route path="/students/:id" element={<StudentDetailPage />} />
                   <Route path="/teachers" element={<TeachersPage />} />

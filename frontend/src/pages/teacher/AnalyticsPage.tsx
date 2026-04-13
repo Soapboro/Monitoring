@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { getMyTeacherProfile, getAssignments } from '../../api/resources'
 import { getGroupSummary, getGroupAttendanceBySubject, getTopStudents } from '../../api/analytics'
@@ -6,6 +7,7 @@ import type { GroupSummaryRow, TopStudent } from '../../api/analytics'
 import client from '../../api/client'
 
 export default function AnalyticsPage() {
+  const navigate = useNavigate()
   const [groupIds, setGroupIds] = useState<number[]>([])
   const [groupNames, setGroupNames] = useState<Record<number, string>>({})
   const [selectedGroup, setSelectedGroup] = useState<number | null>(null)
@@ -38,7 +40,7 @@ export default function AnalyticsPage() {
     if (!selectedGroup) return
     Promise.all([
       getGroupSummary(selectedGroup),
-      getTopStudents(selectedGroup, 10),
+      getTopStudents(selectedGroup),
     ]).then(([summary, top]) => {
       setGradeSummary(summary)
       setTopStudents(top)
@@ -54,6 +56,8 @@ export default function AnalyticsPage() {
     min: Number(r.min_grade),
     max: Number(r.max_grade),
     students: r.students_count,
+    testsTotal: r.tests_total,
+    testsPassed: r.tests_passed,
   }))
 
   return (
@@ -93,7 +97,14 @@ export default function AnalyticsPage() {
                   v.toFixed(2),
                   key === 'avg' ? 'Средний' : key === 'min' ? 'Мин' : 'Макс'
                 ]}
-                labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ''}
+                labelFormatter={(_, payload) => {
+                  const p = payload?.[0]?.payload
+                  if (!p) return ''
+                  const tests = p.testsTotal > 0
+                    ? ` · тесты: ${p.testsPassed}/${p.testsTotal}`
+                    : ''
+                  return `${p.fullName}${tests}`
+                }}
                 contentStyle={{ borderRadius: 8, fontSize: 12 }}
               />
               <Bar dataKey="avg" fill="#3b82f6" radius={[4, 4, 0, 0]} name="avg" />
@@ -104,12 +115,58 @@ export default function AnalyticsPage() {
         </div>
       )}
 
-      {topStudents.length > 0 && (
+      {gradeSummary.some(r => r.tests_total > 0) && (
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-base font-semibold text-slate-700">Тесты по дисциплинам</h2>
+            <p className="text-xs text-slate-400 mt-0.5">{groupNames[selectedGroup!] ?? ''}</p>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="text-left px-6 py-3 text-slate-500 font-medium">Дисциплина</th>
+                <th className="text-right px-6 py-3 text-slate-500 font-medium">Сдали / Выдано</th>
+                <th className="text-right px-6 py-3 text-slate-500 font-medium">Прогресс</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {gradeSummary.filter(r => r.tests_total > 0).map(r => {
+                const pct = r.tests_total > 0 ? Math.round(r.tests_passed / r.tests_total * 100) : 0
+                return (
+                  <tr key={r.subject} className="hover:bg-slate-50">
+                    <td className="px-6 py-3 text-slate-800">{r.subject}</td>
+                    <td className="px-6 py-3 text-right">
+                      <span className={`font-semibold ${r.tests_passed >= r.tests_total ? 'text-emerald-600' : 'text-slate-700'}`}>
+                        {r.tests_passed}
+                      </span>
+                      <span className="text-slate-400"> / {r.tests_total}</span>
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${pct >= 80 ? 'bg-emerald-400' : pct >= 50 ? 'bg-blue-400' : 'bg-amber-400'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-slate-500 w-8 text-right">{pct}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {topStudents.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
             <h2 className="text-base font-semibold text-slate-700">
               Рейтинг студентов — {groupNames[selectedGroup!] ?? ''}
             </h2>
+            <span className="text-xs text-slate-400">{topStudents.length} студентов</span>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
@@ -121,9 +178,20 @@ export default function AnalyticsPage() {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {topStudents.map((s, i) => (
-                <tr key={s.id} className="hover:bg-slate-50">
-                  <td className="px-6 py-3 text-slate-400 font-medium">{i + 1}</td>
-                  <td className="px-4 py-3 text-slate-800">{s.name}</td>
+                <tr
+                  key={s.id}
+                  onClick={() => navigate(`/my-students/${s.id}`)}
+                  className="hover:bg-blue-50 cursor-pointer transition-colors"
+                >
+                  <td className="px-6 py-3 font-medium" style={{
+                    color: i === 0 ? '#f59e0b' : i === 1 ? '#94a3b8' : i === 2 ? '#b45309' : '#94a3b8'
+                  }}>
+                    {i + 1}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-slate-800 font-medium">{s.name}</span>
+                    <span className="text-xs text-blue-500 ml-2 opacity-0 group-hover:opacity-100">→</span>
+                  </td>
                   <td className="px-6 py-3 text-right">
                     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                       s.avg_grade >= 4.5 ? 'bg-emerald-100 text-emerald-700' :

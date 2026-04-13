@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models.subject import Subject
 from app.models.user import User
 from app.schemas.subject import SubjectCreate, SubjectUpdate, SubjectOut
-from app.dependencies import require_admin, require_teacher
+from app.dependencies import require_admin, require_teacher, require_student
 
 router = APIRouter(prefix="/api/subjects", tags=["subjects"])
 
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/subjects", tags=["subjects"])
 async def list_subjects(
     department_id: int | None = None,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    _: User = Depends(require_student),
 ):
     query = select(Subject).order_by(Subject.name)
     if department_id is not None:

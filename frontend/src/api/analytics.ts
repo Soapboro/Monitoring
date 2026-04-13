@@ -8,6 +8,8 @@ export interface GroupSummaryRow {
   avg_grade: number
   min_grade: number
   max_grade: number
+  tests_total: number
+  tests_passed: number
 }
 
 export interface StudentSubjectRow {

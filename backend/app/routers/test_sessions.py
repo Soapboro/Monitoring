@@ -1,5 +1,5 @@
 import random
-from datetime import datetime
+from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -13,8 +13,10 @@ from app.models.topic import Topic
 from app.models.adaptive import AdaptiveRecommendation
 from app.models.student import Student
 from app.models.user import User
+from app.models.grade import Grade, GradeType
+from app.models.teaching_assignment import TeachingAssignment
 from app.schemas.test_session import AnswerSubmit, SessionOut, SessionResultOut
-from app.dependencies import get_current_user, require_student
+from app.dependencies import get_current_user, require_student, require_teacher
 
 router = APIRouter(prefix="/api/sessions", tags=["test-sessions"])
 
@@ -55,7 +57,21 @@ def _check_answers(question: Question, answer_data: dict) -> tuple[float, bool]:
         is_correct = given in correct_texts
         return (float(question.score_max) if is_correct else 0.0, is_correct)
 
-    # matching / ordering — ручная проверка не реализована здесь
+    elif q_type == "matching":
+        correct_pairs = options.get("correct", {})  # {"l1": "r1", ...}
+        given_pairs = answer_data.get("pairs", {})
+        if not correct_pairs:
+            return 0.0, False
+        total = len(correct_pairs)
+        correct_count = sum(
+            1 for k, v in given_pairs.items()
+            if str(correct_pairs.get(str(k))) == str(v)
+        )
+        is_correct = correct_count == total
+        score = round(float(question.score_max) * correct_count / total, 2) if total > 0 else 0.0
+        return score, is_correct
+
+    # ordering — ручная проверка не реализована
     return 0.0, False
 
 
@@ -223,11 +239,63 @@ async def finish_session(
 
     await db.commit()
 
+    # Автоматически создаём оценку по результату теста
+    await _auto_grade(db, session, student, pct, passed)
+
     # Обновляем adaptive_recommendations по темам затронутых вопросов
     await _update_adaptive(db, student.id, session.answers, questions if q_ids else [])
 
     await db.refresh(session)
     return session
+
+
+async def _auto_grade(
+    db: AsyncSession,
+    session: TestSession,
+    student: Student,
+    pct: float,
+    passed: bool,
+) -> None:
+    """Создаёт запись Grade по результату теста (если не создана ранее)."""
+    # Не дублируем оценку при повторном вызове
+    existing = await db.execute(select(Grade).where(Grade.session_id == session.id))
+    if existing.scalar_one_or_none():
+        return
+
+    # Ищем учебное назначение: предмет теста + группа студента
+    asgn_q = await db.execute(
+        select(TeachingAssignment).where(
+            TeachingAssignment.subject_id == session.test.subject_id,
+            TeachingAssignment.group_id == student.group_id,
+        )
+    )
+    assignment = asgn_q.scalars().first()
+    if not assignment:
+        return  # нет подходящего назначения — пропускаем
+
+    # Переводим процент в 5-балльную шкалу
+    if pct >= 80:
+        value = 5.0
+    elif pct >= 60:
+        value = 4.0
+    elif pct >= 40:
+        value = 3.0
+    else:
+        value = 2.0
+
+    grade = Grade(
+        student_id=student.id,
+        assignment_id=assignment.id,
+        grade_type=GradeType.current,
+        value=value,
+        passed=passed,
+        comment=f"Авто: {session.test.title}",
+        date_recorded=date.today(),
+        recorded_by=assignment.teacher_id,
+        session_id=session.id,
+    )
+    db.add(grade)
+    await db.commit()
 
 
 async def _update_adaptive(
@@ -294,6 +362,48 @@ async def _update_adaptive(
     await db.commit()
 
 
+@router.get("/{session_id}/questions")
+async def get_session_questions(
+    session_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Вопросы для прохождения теста — без правильных ответов."""
+    result = await db.execute(select(TestSession).where(TestSession.id == session_id))
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Сессия не найдена")
+
+    if current_user.role.value == "student":
+        student = await _get_student(current_user, db)
+        if session.student_id != student.id:
+            raise HTTPException(status_code=403, detail="Доступ запрещён")
+
+    q_ids = session.question_order or []
+    if not q_ids:
+        return []
+
+    qs_result = await db.execute(select(Question).where(Question.id.in_(q_ids)))
+    questions_map = {q.id: q for q in qs_result.scalars().all()}
+
+    def strip_correct(q: Question) -> dict:
+        opts = dict(q.options or {})
+        # Убираем правильные ответы чтобы студент не мог их увидеть в API
+        opts.pop("correct", None)
+        opts.pop("correct_texts", None)
+        return {
+            "id": q.id,
+            "question_type": q.question_type.value,
+            "difficulty": q.difficulty.value,
+            "body": q.body,
+            "image_url": q.image_url,
+            "score_max": float(q.score_max),
+            "options": opts,
+        }
+
+    return [strip_correct(questions_map[qid]) for qid in q_ids if qid in questions_map]
+
+
 @router.get("/{session_id}", response_model=SessionResultOut)
 async def get_session(
     session_id: int,
@@ -335,3 +445,23 @@ async def get_student_sessions(
         query = query.where(TestSession.test_id == test_id)
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.delete("/student/{student_id}/test/{test_id}/reset", status_code=204)
+async def reset_student_test(
+    student_id: int,
+    test_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_teacher),
+):
+    """Сбросить все попытки студента по тесту — преподаватель выдаёт тест заново."""
+    result = await db.execute(
+        select(TestSession).where(
+            TestSession.student_id == student_id,
+            TestSession.test_id == test_id,
+        )
+    )
+    sessions = result.scalars().all()
+    for s in sessions:
+        await db.delete(s)
+    await db.commit()

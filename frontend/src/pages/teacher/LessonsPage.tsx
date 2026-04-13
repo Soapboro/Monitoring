@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Lesson, LessonType } from '../../api/resources'
-import { getLessons, getAssignments, createLesson, deleteLesson, getMyTeacherProfile } from '../../api/resources'
+import { getLessons, getAssignments, getMyTeacherProfile } from '../../api/resources'
 import type { TeachingAssignment } from '../../api/resources'
-import { Overlay, Field, ConfirmDelete } from '../../components/CrudHelpers'
 import client from '../../api/client'
 import type { Subject, Group } from '../../api/resources'
+
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const LESSON_TYPE_LABELS: Record<LessonType, string> = {
   lecture: 'Лекция',
@@ -14,7 +15,6 @@ const LESSON_TYPE_LABELS: Record<LessonType, string> = {
   seminar: 'Семинар',
   other: 'Другое',
 }
-
 const LESSON_TYPE_COLORS: Record<LessonType, string> = {
   lecture: 'bg-blue-100 text-blue-700',
   practice: 'bg-emerald-100 text-emerald-700',
@@ -22,32 +22,42 @@ const LESSON_TYPE_COLORS: Record<LessonType, string> = {
   seminar: 'bg-amber-100 text-amber-700',
   other: 'bg-slate-100 text-slate-600',
 }
+const WEEKDAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function startOfWeek(d: Date): Date {
   const day = d.getDay()
-  const diff = (day === 0 ? -6 : 1 - day)
-  const result = new Date(d)
-  result.setDate(d.getDate() + diff)
-  result.setHours(0, 0, 0, 0)
-  return result
+  const diff = day === 0 ? -6 : 1 - day
+  const r = new Date(d)
+  r.setDate(d.getDate() + diff)
+  r.setHours(0, 0, 0, 0)
+  return r
 }
-
 function addDays(d: Date, n: number): Date {
   const r = new Date(d)
   r.setDate(r.getDate() + n)
   return r
 }
-
 function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10)
 }
-
-function formatTime(iso: string): string {
+function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 }
 
-const WEEKDAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
-const WEEKDAY_FULL = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
+type LessonStatus = 'past' | 'active' | 'upcoming'
+
+function lessonStatus(lesson: Lesson): LessonStatus {
+  const now = new Date()
+  const start = new Date(lesson.starts_at)
+  const end = new Date(lesson.ends_at)
+  if (now > end) return 'past'
+  if (now >= start) return 'active'
+  return 'upcoming'
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function LessonsPage() {
   const navigate = useNavigate()
@@ -57,8 +67,6 @@ export default function LessonsPage() {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [loading, setLoading] = useState(true)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [deleteId, setDeleteId] = useState<number | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -81,11 +89,10 @@ export default function LessonsPage() {
     }
   }
 
-  useEffect(() => { load() }, [weekStart])
+  useEffect(() => { load() }, [weekStart]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const subjectName = (id: number) => subjects.find(s => s.id === id)?.name ?? '—'
   const groupName = (id: number) => groups.find(g => g.id === id)?.name ?? '—'
-
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
   const lessonsByDay = (day: Date) => {
@@ -95,32 +102,30 @@ export default function LessonsPage() {
       .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
   }
 
-  const handleDelete = async () => {
-    if (deleteId === null) return
-    await deleteLesson(deleteId)
-    setDeleteId(null)
-    load()
-  }
-
   const weekLabel = () => {
     const end = addDays(weekStart, 6)
-    const fmtDay = (d: Date) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
-    return `${fmtDay(weekStart)} — ${fmtDay(end)}`
+    const fmt = (d: Date) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })
+    return `${fmt(weekStart)} — ${fmt(end)}`
   }
+
+  // Today's lessons for the banner
+  const todayStr = formatDate(new Date())
+  const todayLessons = lessons
+    .filter(l => l.starts_at.slice(0, 10) === todayStr)
+    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
 
   return (
     <div className="p-8 max-w-6xl">
-      {/* Шапка */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-800 mb-1">Расписание занятий</h1>
+          <h1 className="text-2xl font-semibold text-slate-800 mb-1">Мои занятия</h1>
           <p className="text-slate-400 text-sm">{weekLabel()}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setWeekStart(w => addDays(w, -7))}
             className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-600"
-            title="Предыдущая неделя"
           >
             <ChevronLeft />
           </button>
@@ -133,27 +138,72 @@ export default function LessonsPage() {
           <button
             onClick={() => setWeekStart(w => addDays(w, 7))}
             className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-600"
-            title="Следующая неделя"
           >
             <ChevronRight />
-          </button>
-          <button
-            onClick={() => setCreateOpen(true)}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            + Занятие
           </button>
         </div>
       </div>
 
+      {/* Today's lessons banner */}
+      {!loading && todayLessons.length > 0 && (
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <p className="text-sm font-semibold text-blue-700 mb-3">
+            Сегодня · {new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {todayLessons.map(lesson => {
+              const assign = assignments.find(a => a.id === lesson.assignment_id)
+              const status = lessonStatus(lesson)
+              return (
+                <button
+                  key={lesson.id}
+                  onClick={() => navigate(`/lessons/${lesson.id}`)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-left transition-all hover:shadow-md cursor-pointer ${
+                    status === 'active'
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                      : status === 'past'
+                      ? 'bg-white text-slate-500 border-slate-200'
+                      : 'bg-white text-slate-700 border-blue-200 hover:border-blue-400'
+                  }`}
+                >
+                  <div>
+                    <p className={`text-xs font-bold mb-0.5 ${status === 'active' ? 'text-emerald-100' : 'text-slate-400'}`}>
+                      {fmtTime(lesson.starts_at)}–{fmtTime(lesson.ends_at)}
+                    </p>
+                    <p className="text-sm font-semibold">
+                      {assign ? subjectName(assign.subject_id) : '—'}
+                    </p>
+                    <p className={`text-xs mt-0.5 ${status === 'active' ? 'text-emerald-100' : 'text-slate-400'}`}>
+                      {assign ? groupName(assign.group_id) : ''}
+                      {lesson.room ? ` · ${lesson.room}` : ''}
+                    </p>
+                  </div>
+                  <div className="ml-auto pl-4">
+                    {status === 'active' && (
+                      <span className="text-xs font-medium bg-white/20 px-2 py-0.5 rounded-full whitespace-nowrap">Идёт сейчас</span>
+                    )}
+                    {status === 'upcoming' && (
+                      <span className="text-xs text-blue-600 font-medium whitespace-nowrap">Открыть журнал →</span>
+                    )}
+                    {status === 'past' && (
+                      <span className="text-xs text-slate-400 whitespace-nowrap">Просмотр →</span>
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Weekly calendar */}
       {loading ? <Spinner /> : (
         <div className="grid grid-cols-7 gap-3">
           {weekDays.map((day, i) => {
-            const isToday = formatDate(day) === formatDate(new Date())
+            const isToday = formatDate(day) === todayStr
             const dayLessons = lessonsByDay(day)
             return (
               <div key={i} className="min-h-40">
-                {/* Заголовок дня */}
                 <div className={`text-center mb-2 pb-2 border-b ${isToday ? 'border-blue-300' : 'border-slate-200'}`}>
                   <p className={`text-xs font-medium ${isToday ? 'text-blue-600' : 'text-slate-400'}`}>
                     {WEEKDAY_SHORT[i]}
@@ -163,38 +213,45 @@ export default function LessonsPage() {
                   </p>
                 </div>
 
-                {/* Занятия */}
                 <div className="space-y-2">
                   {dayLessons.map(lesson => {
                     const assign = assignments.find(a => a.id === lesson.assignment_id)
+                    const status = lessonStatus(lesson)
                     return (
                       <div
                         key={lesson.id}
                         onClick={() => navigate(`/lessons/${lesson.id}`)}
-                        className="bg-white rounded-lg border border-slate-100 shadow-sm p-2.5 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all"
+                        className={`rounded-lg border p-2.5 cursor-pointer transition-all shadow-sm ${
+                          status === 'active'
+                            ? 'bg-emerald-50 border-emerald-300 hover:shadow-md'
+                            : status === 'past'
+                            ? 'bg-slate-50 border-slate-100 hover:border-slate-200'
+                            : 'bg-white border-slate-100 hover:border-blue-300 hover:shadow-md'
+                        }`}
                       >
-                        <p className="text-xs font-semibold text-slate-700 leading-tight mb-1 truncate">
-                          {formatTime(lesson.starts_at)}–{formatTime(lesson.ends_at)}
+                        <p className={`text-xs font-semibold leading-tight mb-1 ${
+                          status === 'active' ? 'text-emerald-700' :
+                          status === 'past' ? 'text-slate-400' : 'text-slate-700'
+                        }`}>
+                          {fmtTime(lesson.starts_at)}–{fmtTime(lesson.ends_at)}
                         </p>
                         {assign && (
-                          <p className="text-xs text-slate-500 truncate mb-1">
-                            {subjectName(assign.subject_id)}
-                          </p>
-                        )}
-                        {assign && (
-                          <p className="text-xs text-slate-400 truncate">{groupName(assign.group_id)}</p>
+                          <>
+                            <p className={`text-xs truncate mb-0.5 ${status === 'past' ? 'text-slate-400' : 'text-slate-600'}`}>
+                              {subjectName(assign.subject_id)}
+                            </p>
+                            <p className="text-xs text-slate-400 truncate">{groupName(assign.group_id)}</p>
+                          </>
                         )}
                         <div className="flex items-center justify-between mt-1.5">
-                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${LESSON_TYPE_COLORS[lesson.lesson_type]}`}>
+                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                            status === 'past' ? 'bg-slate-100 text-slate-400' : LESSON_TYPE_COLORS[lesson.lesson_type]
+                          }`}>
                             {LESSON_TYPE_LABELS[lesson.lesson_type]}
                           </span>
-                          <button
-                            onClick={e => { e.stopPropagation(); setDeleteId(lesson.id) }}
-                            className="text-slate-300 hover:text-red-500 transition-colors p-0.5"
-                            title="Удалить"
-                          >
-                            <TrashMini />
-                          </button>
+                          {status === 'active' && (
+                            <span className="text-xs font-semibold text-emerald-600">● Идёт</span>
+                          )}
                         </div>
                         {lesson.room && (
                           <p className="text-xs text-slate-400 mt-1">📍 {lesson.room}</p>
@@ -211,123 +268,11 @@ export default function LessonsPage() {
           })}
         </div>
       )}
-
-      {createOpen && (
-        <CreateLessonModal
-          assignments={assignments}
-          subjects={subjects}
-          groups={groups}
-          onClose={() => setCreateOpen(false)}
-          onSave={() => { setCreateOpen(false); load() }}
-        />
-      )}
-
-      {deleteId !== null && (
-        <ConfirmDelete
-          text="Удалить занятие? Записи о посещаемости за этот день не удалятся."
-          onConfirm={handleDelete}
-          onCancel={() => setDeleteId(null)}
-        />
-      )}
     </div>
   )
 }
 
-function CreateLessonModal({ assignments, subjects, groups, onClose, onSave }: {
-  assignments: TeachingAssignment[]
-  subjects: Subject[]
-  groups: Group[]
-  onClose: () => void
-  onSave: () => void
-}) {
-  const today = new Date().toISOString().slice(0, 16)
-  const [assignmentId, setAssignmentId] = useState('')
-  const [startsAt, setStartsAt] = useState(today)
-  const [endsAt, setEndsAt] = useState(today)
-  const [topic, setTopic] = useState('')
-  const [lessonType, setLessonType] = useState<LessonType>('lecture')
-  const [room, setRoom] = useState('')
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const subjectName = (id: number) => subjects.find(s => s.id === id)?.name ?? '—'
-  const groupName = (id: number) => groups.find(g => g.id === id)?.name ?? '—'
-
-  const submit = async () => {
-    if (!assignmentId) { setError('Выберите дисциплину / группу'); return }
-    if (!startsAt || !endsAt) { setError('Укажите время'); return }
-    if (endsAt <= startsAt) { setError('Время окончания должно быть позже начала'); return }
-    setSaving(true)
-    setError('')
-    try {
-      await createLesson({
-        assignment_id: parseInt(assignmentId),
-        starts_at: new Date(startsAt).toISOString(),
-        ends_at: new Date(endsAt).toISOString(),
-        topic: topic.trim() || undefined,
-        lesson_type: lessonType,
-        room: room.trim() || undefined,
-      })
-      onSave()
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? 'Ошибка сохранения')
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Overlay onClose={onClose}>
-      <h2 className="text-lg font-semibold text-slate-800 mb-5">Новое занятие</h2>
-      <Field label="Дисциплина / группа">
-        <select value={assignmentId} onChange={e => setAssignmentId(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">— выберите —</option>
-          {assignments.map(a => (
-            <option key={a.id} value={a.id}>
-              {subjectName(a.subject_id)} · {groupName(a.group_id)} ({a.acad_year}, сем. {a.semester})
-            </option>
-          ))}
-        </select>
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Начало">
-          <input type="datetime-local" value={startsAt} onChange={e => setStartsAt(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </Field>
-        <Field label="Конец">
-          <input type="datetime-local" value={endsAt} onChange={e => setEndsAt(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </Field>
-      </div>
-      <Field label="Тип занятия">
-        <select value={lessonType} onChange={e => setLessonType(e.target.value as LessonType)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          {(Object.entries(LESSON_TYPE_LABELS) as [LessonType, string][]).map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Тема (необязательно)">
-        <input value={topic} onChange={e => setTopic(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </Field>
-      <Field label="Аудитория (необязательно)">
-        <input value={room} onChange={e => setRoom(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </Field>
-      {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
-      <div className="flex justify-end gap-3 mt-2">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">
-          Отмена
-        </button>
-        <button onClick={submit} disabled={saving}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-          {saving ? 'Создание...' : 'Создать'}
-        </button>
-      </div>
-    </Overlay>
-  )
-}
+// ── Icons ──────────────────────────────────────────────────────────────────────
 
 function ChevronLeft() {
   return <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -337,12 +282,6 @@ function ChevronLeft() {
 function ChevronRight() {
   return <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-  </svg>
-}
-function TrashMini() {
-  return <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4h6v3M4 7h16" />
   </svg>
 }
 function Spinner() {

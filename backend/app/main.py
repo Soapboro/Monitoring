@@ -1,5 +1,7 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.routers import (
     auth,
@@ -20,6 +22,7 @@ from app.routers import (
     analytics,
     reports,
     notifications,
+    upload,
 )
 
 app = FastAPI(
@@ -54,6 +57,12 @@ app.include_router(lessons.router)
 app.include_router(analytics.router)
 app.include_router(reports.router)
 app.include_router(notifications.router)
+app.include_router(upload.router)
+
+# Статические файлы (загруженные картинки)
+_media_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media")
+os.makedirs(_media_dir, exist_ok=True)
+app.mount("/media", StaticFiles(directory=_media_dir), name="media")
 
 
 @app.get("/", tags=["health"])

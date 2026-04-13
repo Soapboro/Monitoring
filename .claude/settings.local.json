@@ -4,7 +4,17 @@
       "Bash(git -C /c/Users/1/Desktop/Monitoring log --oneline)",
       "Bash(npm --version)",
       "Bash(npm create:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(python seed_demo.py)",
+      "Bash(python -c ':*)",
+      "Bash(cat info.txt)",
+      "Bash(ls *.txt *.cfg *.toml *.ini)",
+      "Bash(cat ../info.txt)",
+      "Bash(python -c \"from main import app; print\\('OK, routes:', len\\(app.routes\\)\\)\")",
+      "Bash(npx tsc:*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(node_modules/.bin/vite build:*)"
     ]
   }
 }

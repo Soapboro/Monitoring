@@ -16,6 +16,7 @@ const ROLE_LABELS = {
 const ROLE_NAV: Record<string, NavItem[]> = {
   admin: [
     { to: '/dashboard', label: 'Главная', icon: <HomeIcon /> },
+    { to: '/schedule', label: 'Расписание', icon: <CalendarIcon /> },
     { to: '/users', label: 'Пользователи', icon: <UsersIcon /> },
     { to: '/students', label: 'Студенты', icon: <StudentIcon /> },
     { to: '/teachers', label: 'Преподаватели', icon: <TeacherIcon /> },

@@ -192,6 +192,10 @@ export const deleteGrade = (id: number) => client.delete(`/grades/${id}`)
 export const getMyTeacherProfile = () => client.get<TeacherProfile>('/teachers/me').then(r => r.data)
 export const getAssignments = (teacherId: number) =>
   client.get<TeachingAssignment[]>('/teaching-assignments', { params: { teacher_id: teacherId } }).then(r => r.data)
+export const getAllAssignments = (teacherId?: number) =>
+  client.get<TeachingAssignment[]>('/teaching-assignments', {
+    params: teacherId ? { teacher_id: teacherId } : undefined,
+  }).then(r => r.data)
 
 // --- Student ---
 export const getMyStudentProfile = () => client.get<StudentProfile>('/students/me/profile').then(r => r.data)

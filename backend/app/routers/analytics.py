@@ -7,6 +7,7 @@ from app.database import get_db
 from app.models.grade import Grade, GradeType
 from app.models.attendance import Attendance
 from app.models.test_session import TestSession, SessionStatus
+from app.models.test import Test, TestAssignment as TestAssign
 from app.models.student import Student
 from app.models.group import Group
 from app.models.teaching_assignment import TeachingAssignment
@@ -25,9 +26,10 @@ async def group_summary(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_teacher),
 ):
-    """Средний балл, мин/макс по группе в разрезе дисциплин."""
+    """Средний балл, мин/макс по группе в разрезе дисциплин + статистика тестов."""
     query = (
         select(
+            Subject.id.label("subject_id"),
             Subject.name.label("subject"),
             TeachingAssignment.acad_year,
             TeachingAssignment.semester,
@@ -42,7 +44,7 @@ async def group_summary(
             TeachingAssignment.group_id == group_id,
             Grade.value.isnot(None),
         )
-        .group_by(Subject.name, TeachingAssignment.acad_year, TeachingAssignment.semester)
+        .group_by(Subject.id, Subject.name, TeachingAssignment.acad_year, TeachingAssignment.semester)
         .order_by(TeachingAssignment.acad_year, TeachingAssignment.semester, Subject.name)
     )
     if acad_year:
@@ -52,7 +54,50 @@ async def group_summary(
 
     result = await db.execute(query)
     rows = result.mappings().all()
-    return [dict(r) for r in rows]
+
+    # Количество выданных тестов по предметам для этой группы
+    total_q = (
+        select(
+            Test.subject_id,
+            func.count(func.distinct(TestAssign.test_id)).label("tests_total"),
+        )
+        .join(Test, TestAssign.test_id == Test.id)
+        .where(TestAssign.group_id == group_id)
+        .group_by(Test.subject_id)
+    )
+    total_map = {
+        r["subject_id"]: r["tests_total"]
+        for r in (await db.execute(total_q)).mappings().all()
+    }
+
+    # Количество успешно пройденных сессий по предметам для студентов группы
+    passed_q = (
+        select(
+            Test.subject_id,
+            func.count(TestSession.id).label("tests_passed"),
+        )
+        .join(Test, TestSession.test_id == Test.id)
+        .join(Student, TestSession.student_id == Student.id)
+        .where(
+            Student.group_id == group_id,
+            TestSession.status == SessionStatus.completed,
+            TestSession.passed == True,
+        )
+        .group_by(Test.subject_id)
+    )
+    passed_map = {
+        r["subject_id"]: r["tests_passed"]
+        for r in (await db.execute(passed_q)).mappings().all()
+    }
+
+    out = []
+    for r in rows:
+        row = dict(r)
+        sid = row.pop("subject_id")
+        row["tests_total"] = total_map.get(sid, 0)
+        row["tests_passed"] = passed_map.get(sid, 0)
+        out.append(row)
+    return out
 
 
 @router.get("/student-progress/{student_id}")

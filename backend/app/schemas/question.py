@@ -9,6 +9,7 @@ class QuestionCreate(BaseModel):
     question_type: QuestionType = QuestionType.single_choice
     difficulty: Difficulty = Difficulty.medium
     body: str
+    image_url: str | None = None
     explanation: str | None = None
     score_max: float = 1.0
     options: dict[str, Any] | None = None
@@ -19,6 +20,7 @@ class QuestionUpdate(BaseModel):
     question_type: QuestionType | None = None
     difficulty: Difficulty | None = None
     body: str | None = None
+    image_url: str | None = None
     explanation: str | None = None
     score_max: float | None = None
     options: dict[str, Any] | None = None
@@ -32,6 +34,7 @@ class QuestionOut(BaseModel):
     question_type: QuestionType
     difficulty: Difficulty
     body: str
+    image_url: str | None
     explanation: str | None
     score_max: float
     options: dict[str, Any] | None
