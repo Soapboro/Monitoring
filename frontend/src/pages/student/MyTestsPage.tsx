@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  Box, Paper, Typography, Chip, CircularProgress,
+  Table, TableHead, TableBody, TableRow, TableCell,
+  Button, Tabs, Tab,
+} from '@mui/material'
+import { TimerRounded } from '@mui/icons-material'
 import client from '../../api/client'
-import { getMySessions } from '../../api/resources'
-import type { TestSession } from '../../api/resources'
-import { getSubjects } from '../../api/resources'
-import type { Subject } from '../../api/resources'
-
-// ─── Types ───────────────────────────────────────────────────────────────────
+import { getMySessions, getSubjects } from '../../api/resources'
+import type { TestSession, Subject } from '../../api/resources'
 
 interface AvailableTest {
   test_id: number
@@ -24,22 +26,25 @@ interface AvailableTest {
   best_pct: number | null
 }
 
-const AVAIL_STATUS = {
-  available:   { label: 'Доступен',         cls: 'bg-blue-100 text-blue-700' },
-  in_progress: { label: 'В процессе',       cls: 'bg-amber-100 text-amber-700' },
-  passed:      { label: 'Сдан',             cls: 'bg-emerald-100 text-emerald-700' },
-  exhausted:   { label: 'Попытки исчерпаны', cls: 'bg-slate-100 text-slate-500' },
-  expired:     { label: 'Истёк срок',        cls: 'bg-red-100 text-red-500' },
+const AVAIL_STATUS_SX: Record<string, { bgcolor: string; color: string }> = {
+  available:   { bgcolor: '#DBEAFE', color: '#1D4ED8' },
+  in_progress: { bgcolor: '#FEF3C7', color: '#92400E' },
+  passed:      { bgcolor: '#D4EDDF', color: '#347856' },
+  exhausted:   { bgcolor: '#F1F5F9', color: '#64748b' },
+  expired:     { bgcolor: '#F4D0CC', color: '#D05050' },
 }
-
-const SESSION_STATUS = {
-  completed:   { label: 'Завершён',   cls: 'bg-emerald-100 text-emerald-700' },
-  in_progress: { label: 'В процессе', cls: 'bg-amber-100 text-amber-700' },
-  timed_out:   { label: 'Время вышло', cls: 'bg-red-100 text-red-500' },
-  abandoned:   { label: 'Прерван',    cls: 'bg-slate-100 text-slate-500' },
+const AVAIL_STATUS_LABEL: Record<string, string> = {
+  available: 'Доступен', in_progress: 'В процессе', passed: 'Сдан', exhausted: 'Попытки исчерпаны', expired: 'Истёк срок',
 }
-
-// ─── Available tests tab ──────────────────────────────────────────────────────
+const SESSION_STATUS_SX: Record<string, { bgcolor: string; color: string }> = {
+  completed:   { bgcolor: '#D4EDDF', color: '#347856' },
+  in_progress: { bgcolor: '#FEF3C7', color: '#92400E' },
+  timed_out:   { bgcolor: '#F4D0CC', color: '#D05050' },
+  abandoned:   { bgcolor: '#F1F5F9', color: '#64748b' },
+}
+const SESSION_STATUS_LABEL: Record<string, string> = {
+  completed: 'Завершён', in_progress: 'В процессе', timed_out: 'Время вышло', abandoned: 'Прерван',
+}
 
 function AvailableTab({ subjects }: { subjects: Subject[] }) {
   const navigate = useNavigate()
@@ -50,193 +55,149 @@ function AvailableTab({ subjects }: { subjects: Subject[] }) {
   const subjectMap = Object.fromEntries(subjects.map(s => [s.id, s.name]))
 
   useEffect(() => {
-    client.get<AvailableTest[]>('/tests/my-available').then(r => setTests(r.data))
-      .finally(() => setLoading(false))
+    client.get<AvailableTest[]>('/tests/my-available').then(r => setTests(r.data)).finally(() => setLoading(false))
   }, [])
 
-  async function startOrContinue(t: AvailableTest) {
-    if (t.status === 'in_progress' && t.session_id) {
-      navigate(`/my-tests/session/${t.session_id}`)
-      return
-    }
+  const startOrContinue = async (t: AvailableTest) => {
+    if (t.status === 'in_progress' && t.session_id) { navigate(`/my-tests/session/${t.session_id}`); return }
     setStarting(t.test_id)
     try {
       const { data } = await client.post<{ id: number }>(`/sessions/start/${t.test_id}`)
       navigate(`/my-tests/session/${data.id}`)
-    } catch (e: any) {
-      alert(e?.response?.data?.detail ?? 'Ошибка запуска теста')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      alert(msg ?? 'Ошибка запуска теста')
     } finally { setStarting(null) }
   }
 
-  if (loading) return <Spinner />
-
-  if (tests.length === 0) return (
-    <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 shadow-sm">
-      Тестов пока нет
-    </div>
-  )
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+  if (tests.length === 0) return <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">Тестов пока нет</Typography></Paper>
 
   return (
-    <div className="grid gap-4">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {tests.map(t => {
-        const st = AVAIL_STATUS[t.status]
         const canStart = t.status === 'available' || t.status === 'in_progress'
         return (
-          <div key={t.test_id} className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <h3 className="font-semibold text-slate-800">{t.title}</h3>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.cls}`}>{st.label}</span>
-                </div>
+          <Paper key={t.test_id} elevation={1} sx={{ p: 2.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 0.75 }}>
+                  <Typography variant="subtitle2" fontWeight={600}>{t.title}</Typography>
+                  <Chip label={AVAIL_STATUS_LABEL[t.status]} size="small" sx={AVAIL_STATUS_SX[t.status]} />
+                </Box>
                 {t.description && (
-                  <p className="text-sm text-slate-500 mb-2 line-clamp-2">{t.description}</p>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                    {t.description}
+                  </Typography>
                 )}
-                <div className="flex flex-wrap gap-3 text-xs text-slate-400">
-                  <span>{subjectMap[t.subject_id] ?? `Предмет ${t.subject_id}`}</span>
-                  {t.time_limit_minutes && <span>⏱ {t.time_limit_minutes} мин</span>}
-                  <span>Попытки: {t.attempts_used}/{t.attempts_allowed}</span>
-                  <span>Порог: {t.passing_score_pct}%</span>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                  <Typography variant="caption" color="text.disabled">{subjectMap[t.subject_id] ?? `Предмет ${t.subject_id}`}</Typography>
+                  {t.time_limit_minutes && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+                      <TimerRounded sx={{ fontSize: 13, color: 'text.disabled' }} />
+                      <Typography variant="caption" color="text.disabled">{t.time_limit_minutes} мин</Typography>
+                    </Box>
+                  )}
+                  <Typography variant="caption" color="text.disabled">Попытки: {t.attempts_used}/{t.attempts_allowed}</Typography>
+                  <Typography variant="caption" color="text.disabled">Порог: {t.passing_score_pct}%</Typography>
                   {t.available_to && (
-                    <span>до {new Date(t.available_to).toLocaleDateString('ru')}</span>
+                    <Typography variant="caption" color="text.disabled">до {new Date(t.available_to).toLocaleDateString('ru')}</Typography>
                   )}
                   {t.best_pct !== null && (
-                    <span className="text-emerald-600 font-medium">Лучший: {t.best_pct}%</span>
+                    <Typography variant="caption" sx={{ color: '#347856', fontWeight: 600 }}>Лучший: {t.best_pct}%</Typography>
                   )}
-                </div>
-              </div>
+                </Box>
+              </Box>
               {canStart && (
-                <button
-                  onClick={() => startOrContinue(t)}
+                <Button
+                  variant="contained"
+                  size="small"
                   disabled={starting === t.test_id}
-                  className={`shrink-0 px-4 py-2 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 ${
-                    t.status === 'in_progress'
-                      ? 'bg-amber-500 text-white hover:bg-amber-600'
-                      : 'bg-blue-600 text-white hover:bg-blue-700'
-                  }`}>
-                  {starting === t.test_id ? 'Загрузка...' :
-                    t.status === 'in_progress' ? 'Продолжить' : 'Начать'}
-                </button>
+                  onClick={() => startOrContinue(t)}
+                  sx={{ flexShrink: 0, bgcolor: t.status === 'in_progress' ? '#C9874A' : undefined, '&:hover': { bgcolor: t.status === 'in_progress' ? '#b07240' : undefined } }}
+                >
+                  {starting === t.test_id ? 'Загрузка...' : t.status === 'in_progress' ? 'Продолжить' : 'Начать'}
+                </Button>
               )}
-            </div>
-          </div>
+            </Box>
+          </Paper>
         )
       })}
-    </div>
+    </Box>
   )
 }
-
-// ─── History tab ──────────────────────────────────────────────────────────────
 
 function HistoryTab() {
   const [sessions, setSessions] = useState<TestSession[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    getMySessions().then(setSessions).finally(() => setLoading(false))
-  }, [])
+  useEffect(() => { getMySessions().then(setSessions).finally(() => setLoading(false)) }, [])
 
-  if (loading) return <Spinner />
-  if (sessions.length === 0) return (
-    <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 shadow-sm">
-      Истории нет
-    </div>
-  )
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+  if (sessions.length === 0) return <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">Истории нет</Typography></Paper>
 
   return (
-    <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50">
-          <tr>
-            <th className="text-left px-6 py-3 text-slate-500 font-medium">Дата</th>
-            <th className="text-left px-4 py-3 text-slate-500 font-medium">Тест</th>
-            <th className="text-center px-4 py-3 text-slate-500 font-medium">Статус</th>
-            <th className="text-right px-4 py-3 text-slate-500 font-medium">Баллы</th>
-            <th className="text-right px-6 py-3 text-slate-500 font-medium">Результат</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-50">
+    <Paper elevation={2} sx={{ overflow: 'hidden' }}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Дата</TableCell>
+            <TableCell>Тест</TableCell>
+            <TableCell align="center">Статус</TableCell>
+            <TableCell align="right">Баллы</TableCell>
+            <TableCell align="right">Результат</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {sessions.map(s => {
-            const pct = s.score_max && s.score_max > 0
-              ? Math.round((s.score_total ?? 0) / s.score_max * 100)
-              : null
-            const st = SESSION_STATUS[s.status as keyof typeof SESSION_STATUS]
-              ?? { label: s.status, cls: 'bg-slate-100 text-slate-500' }
+            const pct = s.score_max && s.score_max > 0 ? Math.round((s.score_total ?? 0) / s.score_max * 100) : null
+            const statusSx = SESSION_STATUS_SX[s.status] ?? { bgcolor: '#F1F5F9', color: '#64748b' }
+            const statusLabel = SESSION_STATUS_LABEL[s.status] ?? s.status
+            const resultSx = s.passed === true ? { bgcolor: '#D4EDDF', color: '#347856' } :
+                             s.passed === false ? { bgcolor: '#F4D0CC', color: '#D05050' } :
+                             { bgcolor: '#F1F5F9', color: '#64748b' }
             return (
-              <tr key={s.id} className="hover:bg-slate-50">
-                <td className="px-6 py-3 text-slate-500">
-                  {new Date(s.started_at).toLocaleDateString('ru')}
-                </td>
-                <td className="px-4 py-3 text-slate-700">Тест #{s.test_id}</td>
-                <td className="px-4 py-3 text-center">
-                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${st.cls}`}>
-                    {st.label}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right text-slate-500">
-                  {s.score_total !== null && s.score_max !== null
-                    ? `${s.score_total} / ${s.score_max}`
-                    : '—'}
-                </td>
-                <td className="px-6 py-3 text-right">
-                  {pct !== null ? (
-                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                      s.passed === true ? 'bg-emerald-100 text-emerald-700' :
-                      s.passed === false ? 'bg-red-100 text-red-600' :
-                      'bg-slate-100 text-slate-500'
-                    }`}>
-                      {pct}%
-                    </span>
-                  ) : <span className="text-slate-400">—</span>}
-                </td>
-              </tr>
+              <TableRow key={s.id} hover>
+                <TableCell sx={{ color: 'text.secondary' }}>{new Date(s.started_at).toLocaleDateString('ru')}</TableCell>
+                <TableCell>Тест #{s.test_id}</TableCell>
+                <TableCell align="center">
+                  <Chip label={statusLabel} size="small" sx={statusSx} />
+                </TableCell>
+                <TableCell align="right" sx={{ color: 'text.secondary' }}>
+                  {s.score_total !== null && s.score_max !== null ? `${s.score_total} / ${s.score_max}` : '—'}
+                </TableCell>
+                <TableCell align="right">
+                  {pct !== null
+                    ? <Chip label={`${pct}%`} size="small" sx={resultSx} />
+                    : <Typography variant="body2" color="text.disabled">—</Typography>}
+                </TableCell>
+              </TableRow>
             )
           })}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </Paper>
   )
 }
-
-// ─── Main ─────────────────────────────────────────────────────────────────────
 
 export default function MyTestsPage() {
-  const [tab, setTab] = useState<'available' | 'history'>('available')
+  const [tab, setTab] = useState(0)
   const [subjects, setSubjects] = useState<Subject[]>([])
 
-  useEffect(() => {
-    getSubjects().then(setSubjects).catch(() => {})
-  }, [])
+  useEffect(() => { getSubjects().then(setSubjects).catch(() => {}) }, [])
 
   return (
-    <div className="p-8 max-w-3xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-slate-800 mb-1">Мои тесты</h1>
-        <p className="text-slate-400 text-sm">Доступные тесты и история прохождений</p>
-      </div>
+    <Box sx={{ p: 4, maxWidth: 800 }}>
+      <Typography variant="h5" fontWeight={700}>Мои тесты</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>Доступные тесты и история прохождений</Typography>
 
-      <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {([['available', 'Доступные'], ['history', 'История']] as const).map(([t, label]) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === t ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
+        <Tab label="Доступные" />
+        <Tab label="История" />
+      </Tabs>
 
-      {tab === 'available' && <AvailableTab subjects={subjects} />}
-      {tab === 'history' && <HistoryTab />}
-    </div>
-  )
-}
-
-function Spinner() {
-  return (
-    <div className="flex items-center gap-3 text-slate-400 py-8">
-      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      Загрузка...
-    </div>
+      {tab === 0 && <AvailableTab subjects={subjects} />}
+      {tab === 1 && <HistoryTab />}
+    </Box>
   )
 }

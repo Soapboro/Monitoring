@@ -1,21 +1,19 @@
 import { Navigate } from 'react-router-dom'
+import { Box, CircularProgress } from '@mui/material'
 import { useAuthStore } from '../store/authStore'
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const user = useAuthStore((s) => s.user)
-  const loading = useAuthStore((s) => s.loading)
+  const user    = useAuthStore(s => s.user)
+  const loading = useAuthStore(s => s.loading)
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-      </div>
+      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress color="primary" />
+      </Box>
     )
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-
+  if (!user) return <Navigate to="/login" replace />
   return <>{children}</>
 }

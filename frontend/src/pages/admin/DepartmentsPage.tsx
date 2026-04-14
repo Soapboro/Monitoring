@@ -1,21 +1,29 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  Box, Paper, Typography, TextField, Button, Alert, Chip,
+  Table, TableHead, TableBody, TableRow, TableCell,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Stack, IconButton, InputAdornment, CircularProgress,
+} from '@mui/material'
+import { SearchRounded, EditRounded, DeleteRounded, AddRounded } from '@mui/icons-material'
 import client from '../../api/client'
 import type { Subject, Department } from '../../api/resources'
 import { createDepartment, updateDepartment, deleteDepartment } from '../../api/resources'
-import { Overlay, Field, ConfirmDelete, PencilIcon, TrashIcon } from '../../components/CrudHelpers'
+import { ConfirmDelete } from '../../components/CrudHelpers'
 import { useSort } from '../../hooks/useSort'
 import SortableHeader from '../../components/SortableHeader'
+import { PEACH, WARM } from '../../theme'
 
-interface Group { id: number; name: string; department_id: number | null }
 interface DeptRow extends Department { subjectCount: number; groupCount: number }
+interface GrpShort { id: number; name: string; department_id: number | null }
 
 export default function DepartmentsPage() {
   const navigate = useNavigate()
-  const [rows, setRows] = useState<DeptRow[]>([])
-  const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState<{ mode: 'create' | 'edit'; dept?: Department } | null>(null)
+  const [rows, setRows]         = useState<DeptRow[]>([])
+  const [search, setSearch]     = useState('')
+  const [loading, setLoading]   = useState(true)
+  const [modal, setModal]       = useState<{ mode: 'create' | 'edit'; dept?: Department } | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
   const load = async () => {
@@ -23,7 +31,7 @@ export default function DepartmentsPage() {
     const [depts, subjects, groups] = await Promise.all([
       client.get<Department[]>('/departments').then(r => r.data),
       client.get<Subject[]>('/subjects').then(r => r.data),
-      client.get<Group[]>('/groups').then(r => r.data),
+      client.get<GrpShort[]>('/groups').then(r => r.data),
     ])
     const subjectCount: Record<number, number> = {}
     for (const s of subjects) if (s.department_id) subjectCount[s.department_id] = (subjectCount[s.department_id] ?? 0) + 1
@@ -32,18 +40,16 @@ export default function DepartmentsPage() {
     setRows(depts.map(d => ({ ...d, subjectCount: subjectCount[d.id] ?? 0, groupCount: groupCount[d.id] ?? 0 })))
     setLoading(false)
   }
-
   useEffect(() => { load() }, [])
 
   const filtered = rows.filter(d =>
     `${d.name} ${d.code ?? ''} ${d.description ?? ''}`.toLowerCase().includes(search.toLowerCase())
   )
-
   const { sorted, sortKey, sortDir, toggleSort } = useSort(filtered, (d, key) => {
-    if (key === 'name') return d.name
-    if (key === 'code') return d.code ?? ''
+    if (key === 'name')     return d.name
+    if (key === 'code')     return d.code ?? ''
     if (key === 'subjects') return d.subjectCount
-    if (key === 'groups') return d.groupCount
+    if (key === 'groups')   return d.groupCount
     return ''
   })
 
@@ -54,79 +60,99 @@ export default function DepartmentsPage() {
     load()
   }
 
-  if (loading) return <Spinner />
+  if (loading) return <Spin />
 
   return (
-    <div className="p-8 max-w-5xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-800 mb-1">Кафедры</h1>
-          <p className="text-slate-400 text-sm">Всего: {rows.length}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <input type="text" placeholder="Поиск по названию или коду..."
+    <Box sx={{ p: 4, maxWidth: 1000 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 3 }}>
+        <Box>
+          <Typography variant="h5" fontWeight={700}>Кафедры</Typography>
+          <Typography variant="body2" color="text.secondary">Всего: {rows.length}</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
+          <TextField
+            size="small" placeholder="Поиск по названию или коду..."
             value={search} onChange={e => setSearch(e.target.value)}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-2 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <button onClick={() => setModal({ mode: 'create' })}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">
-            + Создать
-          </button>
-        </div>
-      </div>
+            InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+            sx={{ width: 280 }}
+          />
+          <Button variant="contained" startIcon={<AddRounded />} onClick={() => setModal({ mode: 'create' })}>
+            Создать
+          </Button>
+        </Box>
+      </Box>
 
       {sorted.length === 0 ? <Empty text="Ничего не найдено" /> : (
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <SortableHeader label="Кафедра" sortKey="name" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="px-6" />
-                <SortableHeader label="Код" sortKey="code" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                <SortableHeader label="Дисциплин" sortKey="subjects" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
-                <SortableHeader label="Групп" sortKey="groups" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
-                <th className="px-6 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
+        <Paper elevation={2}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <SortableHeader label="Кафедра"    sortKey="name"     currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Код"        sortKey="code"     currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Дисциплин"  sortKey="subjects" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                <SortableHeader label="Групп"      sortKey="groups"   currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {sorted.map(d => (
-                <tr key={d.id} className="hover:bg-blue-50 transition-colors">
-                  <td className="px-6 py-3 cursor-pointer" onClick={() => navigate(`/departments/${d.id}`)}>
-                    <p className="font-medium text-slate-800">{d.name}</p>
-                    {d.description && <p className="text-xs text-slate-400 mt-0.5 truncate max-w-xs">{d.description}</p>}
-                  </td>
-                  <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/departments/${d.id}`)}>
-                    {d.code ? <span className="text-xs bg-blue-50 text-blue-600 font-mono px-2 py-0.5 rounded">{d.code}</span> : <span className="text-slate-400">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-right cursor-pointer" onClick={() => navigate(`/departments/${d.id}`)}>
-                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${d.subjectCount > 0 ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400'}`}>{d.subjectCount || '—'}</span>
-                  </td>
-                  <td className="px-4 py-3 text-right cursor-pointer" onClick={() => navigate(`/departments/${d.id}`)}>
-                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${d.groupCount > 0 ? 'bg-emerald-50 text-emerald-600' : 'text-slate-400'}`}>{d.groupCount || '—'}</span>
-                  </td>
-                  <td className="px-6 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => setModal({ mode: 'edit', dept: d })} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-100 rounded transition-colors" title="Редактировать"><PencilIcon /></button>
-                      <button onClick={() => setDeleteId(d.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><TrashIcon /></button>
-                    </div>
-                  </td>
-                </tr>
+                <TableRow key={d.id} hover>
+                  <TableCell sx={{ cursor: 'pointer' }} onClick={() => navigate(`/departments/${d.id}`)}>
+                    <Typography variant="body2" fontWeight={500}>{d.name}</Typography>
+                    {d.description && <Typography variant="caption" color="text.secondary">{d.description.slice(0, 60)}{d.description.length > 60 ? '…' : ''}</Typography>}
+                  </TableCell>
+                  <TableCell sx={{ cursor: 'pointer' }} onClick={() => navigate(`/departments/${d.id}`)}>
+                    {d.code
+                      ? <Chip label={d.code} size="small" variant="outlined" sx={{ fontFamily: 'monospace', fontSize: 11 }} />
+                      : <Typography variant="body2" color="text.disabled">—</Typography>}
+                  </TableCell>
+                  <TableCell align="right" sx={{ cursor: 'pointer' }} onClick={() => navigate(`/departments/${d.id}`)}>
+                    {d.subjectCount > 0
+                      ? <Chip label={d.subjectCount} size="small" sx={{ bgcolor: PEACH[50], color: PEACH[700] }} />
+                      : <Typography variant="body2" color="text.disabled">—</Typography>}
+                  </TableCell>
+                  <TableCell align="right" sx={{ cursor: 'pointer' }} onClick={() => navigate(`/departments/${d.id}`)}>
+                    {d.groupCount > 0
+                      ? <Chip label={d.groupCount} size="small" sx={{ bgcolor: '#D4EDDF', color: '#347856' }} />
+                      : <Typography variant="body2" color="text.disabled">—</Typography>}
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton size="small" onClick={() => setModal({ mode: 'edit', dept: d })}
+                      sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main' } }}>
+                      <EditRounded fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => setDeleteId(d.id)}
+                      sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+                      <DeleteRounded fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Paper>
       )}
 
-      {modal && <DepartmentModal mode={modal.mode} dept={modal.dept} onClose={() => setModal(null)} onSave={() => { setModal(null); load() }} />}
-      {deleteId !== null && <ConfirmDelete text="Удалить кафедру? Это действие необратимо." onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />}
-    </div>
+      {modal && (
+        <DepartmentModal mode={modal.mode} dept={modal.dept}
+          onClose={() => setModal(null)} onSave={() => { setModal(null); load() }} />
+      )}
+      {deleteId !== null && (
+        <ConfirmDelete text="Удалить кафедру? Это действие необратимо."
+          onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
+      )}
+    </Box>
   )
 }
 
-function DepartmentModal({ mode, dept, onClose, onSave }: { mode: 'create' | 'edit'; dept?: Department; onClose: () => void; onSave: () => void }) {
-  const [name, setName] = useState(dept?.name ?? '')
-  const [code, setCode] = useState(dept?.code ?? '')
+function DepartmentModal({ mode, dept, onClose, onSave }: {
+  mode: 'create' | 'edit'; dept?: Department; onClose: () => void; onSave: () => void
+}) {
+  const [name, setName]               = useState(dept?.name ?? '')
+  const [code, setCode]               = useState(dept?.code ?? '')
   const [description, setDescription] = useState(dept?.description ?? '')
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [error, setError]             = useState('')
+  const [saving, setSaving]           = useState(false)
 
   const submit = async () => {
     if (!name.trim()) { setError('Название обязательно'); return }
@@ -140,23 +166,31 @@ function DepartmentModal({ mode, dept, onClose, onSave }: { mode: 'create' | 'ed
   }
 
   return (
-    <Overlay onClose={onClose}>
-      <h2 className="text-lg font-semibold text-slate-800 mb-5">{mode === 'create' ? 'Новая кафедра' : 'Редактировать кафедру'}</h2>
-      <Field label="Название"><input value={name} onChange={e => setName(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></Field>
-      <Field label="Код (необязательно)"><input value={code} onChange={e => setCode(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" /></Field>
-      <Field label="Описание (необязательно)"><textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" /></Field>
-      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-      <div className="flex justify-end gap-3 mt-2">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">Отмена</button>
-        <button onClick={submit} disabled={saving} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">{saving ? 'Сохранение...' : 'Сохранить'}</button>
-      </div>
-    </Overlay>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{mode === 'create' ? 'Новая кафедра' : 'Редактировать кафедру'}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <TextField label="Название" size="small" fullWidth value={name} onChange={e => setName(e.target.value)} />
+          <TextField label="Код (необязательно)" size="small" fullWidth value={code} onChange={e => setCode(e.target.value)}
+            inputProps={{ style: { fontFamily: 'monospace' } }} />
+          <TextField label="Описание (необязательно)" size="small" fullWidth multiline rows={3}
+            value={description} onChange={e => setDescription(e.target.value)} />
+          {error && <Alert severity="error" sx={{ py: 0.5 }}>{error}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} variant="outlined">Отмена</Button>
+        <Button onClick={submit} variant="contained" disabled={saving}>
+          {saving ? 'Сохранение...' : 'Сохранить'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
-function Spinner() {
-  return <div className="p-8 flex items-center gap-3 text-slate-400"><div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />Загрузка...</div>
-}
-function Empty({ text }: { text: string }) {
-  return <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 shadow-sm">{text}</div>
-}
+const Spin = () => (
+  <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress color="primary" /></Box>
+)
+const Empty = ({ text }: { text: string }) => (
+  <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">{text}</Typography></Paper>
+)

@@ -1,28 +1,34 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import {
+  Box, Paper, Typography, Chip, CircularProgress, Breadcrumbs, Link,
+  Collapse, Button, LinearProgress,
+} from '@mui/material'
+import { ChevronRightRounded, VerifiedRounded } from '@mui/icons-material'
 import client from '../../api/client'
 import type { StudentProfile, GradeOut, AttendanceRecord, TestSession, TeachingAssignment, Subject } from '../../api/resources'
 import { useAuthStore } from '../../store/authStore'
 import { getMyTeacherProfile, getAssignments } from '../../api/resources'
+import { WARM } from '../../theme'
 
 interface SubjectData {
-  id: number
-  name: string
-  grades: GradeOut[]
-  attendance: AttendanceRecord[]
+  id: number; name: string
+  grades: GradeOut[]; attendance: AttendanceRecord[]
 }
-
 interface TeacherSubjectBlock {
-  assignment: TeachingAssignment
-  subject: Subject
-  grades: GradeOut[]
-  attendance: AttendanceRecord[]
+  assignment: TeachingAssignment; subject: Subject
+  grades: GradeOut[]; attendance: AttendanceRecord[]
 }
 
 const GRADE_TYPE_LABELS: Record<string, string> = {
   current: 'Текущая', midterm: 'Промежуточная', final: 'Итоговая',
   test: 'Тест', exam: 'Экзамен', credit: 'Зачёт',
 }
+
+const gradeChip = (v: number) =>
+  v >= 4 ? { bgcolor: '#D4EDDF', color: '#347856' } :
+  v >= 3 ? { bgcolor: '#DBEAFE', color: '#1D4ED8' } :
+           { bgcolor: '#F4D0CC', color: '#D05050' }
 
 export default function StudentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -48,13 +54,11 @@ export default function StudentDetailPage() {
           client.get<AttendanceRecord[]>('/attendance', { params: { student_id: id } }).then(r => r.data),
           client.get<TestSession[]>('/test-sessions', { params: { student_id: id } }).then(r => r.data).catch(() => []),
         ])
-        setStudent(s)
-        setSessions(sess)
+        setStudent(s); setSessions(sess)
 
         const gRes = await client.get<{ name: string }>(`/groups/${s.group_id}`)
         setGroupName(gRes.data.name)
 
-        // Build assignment → subject map
         const assignmentIds = [...new Set([...gr.map(g => g.assignment_id), ...att.map(a => a.assignment_id)])]
         const assignToSubject: Record<number, { id: number; name: string }> = {}
         await Promise.all(assignmentIds.map(async (aid) => {
@@ -65,17 +69,14 @@ export default function StudentDetailPage() {
           } catch { assignToSubject[aid] = { id: aid, name: `Предмет #${aid}` } }
         }))
 
-        // Group by subject_id
         const subjectMap: Record<number, SubjectData> = {}
         for (const g of gr) {
-          const subj = assignToSubject[g.assignment_id]
-          if (!subj) continue
+          const subj = assignToSubject[g.assignment_id]; if (!subj) continue
           if (!subjectMap[subj.id]) subjectMap[subj.id] = { id: subj.id, name: subj.name, grades: [], attendance: [] }
           subjectMap[subj.id].grades.push(g)
         }
         for (const a of att) {
-          const subj = assignToSubject[a.assignment_id]
-          if (!subj) continue
+          const subj = assignToSubject[a.assignment_id]; if (!subj) continue
           if (!subjectMap[subj.id]) subjectMap[subj.id] = { id: subj.id, name: subj.name, grades: [], attendance: [] }
           subjectMap[subj.id].attendance.push(a)
         }
@@ -83,44 +84,30 @@ export default function StudentDetailPage() {
         setSubjects(subjList)
         if (subjList.length > 0) setExpandedSubject(subjList[0].id)
 
-        // Если текущий пользователь — преподаватель, загружаем его предметы по этому студенту
         if (currentUser?.role === 'teacher') {
           try {
             const teacherProfile = await getMyTeacherProfile()
             const teacherAssignments: TeachingAssignment[] = await getAssignments(teacherProfile.id)
-            // Оставляем только назначения для группы этого студента
             const relevant = teacherAssignments.filter(a => a.group_id === s.group_id)
             if (relevant.length > 0) {
-              const subjDetails = await Promise.all(
-                relevant.map(a =>
-                  client.get<Subject>(`/subjects/${a.subject_id}`).then(r => r.data).catch(() => null)
-                )
-              )
-              const blocks: TeacherSubjectBlock[] = relevant
-                .map((a, i) => {
-                  const subj = subjDetails[i]
-                  if (!subj) return null
-                  // Оценки этого студента по данному назначению
-                  const aGrades = gr.filter(g => g.assignment_id === a.id)
-                  const aAtt = att.filter(x => x.assignment_id === a.id)
-                  return { assignment: a, subject: subj, grades: aGrades, attendance: aAtt }
-                })
-                .filter(Boolean) as TeacherSubjectBlock[]
+              const subjDetails = await Promise.all(relevant.map(a =>
+                client.get<Subject>(`/subjects/${a.subject_id}`).then(r => r.data).catch(() => null)
+              ))
+              const blocks: TeacherSubjectBlock[] = relevant.map((a, i) => {
+                const subj = subjDetails[i]; if (!subj) return null
+                return { assignment: a, subject: subj, grades: gr.filter(g => g.assignment_id === a.id), attendance: att.filter(x => x.assignment_id === a.id) }
+              }).filter(Boolean) as TeacherSubjectBlock[]
               setTeacherBlocks(blocks)
             }
           } catch { /* silent */ }
         }
-      } catch {
-        // silent
-      } finally {
-        setLoading(false)
-      }
+      } catch { /* silent */ } finally { setLoading(false) }
     }
     init()
   }, [id, currentUser?.role])
 
-  if (loading) return <Spinner />
-  if (!student) return <div className="p-8 text-slate-400">Студент не найден</div>
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+  if (!student) return <Typography sx={{ p: 4 }} color="text.secondary">Студент не найден</Typography>
 
   const fullName = `${student.last_name} ${student.first_name}${student.middle_name ? ' ' + student.middle_name : ''}`
   const allGrades = subjects.flatMap(s => s.grades)
@@ -136,436 +123,247 @@ export default function StudentDetailPage() {
   const inProgressSessions = sessions.filter(s => s.status !== 'completed')
 
   return (
-    <div className="p-8 max-w-5xl">
-      {/* Хлебные крошки */}
-      <nav className="flex items-center gap-1.5 text-sm text-slate-400 mb-6">
-        <button onClick={() => navigate('/groups')} className="hover:text-blue-600 cursor-pointer transition-colors">Группы</button>
-        <Chevron />
-        <button onClick={() => navigate(`/groups/${student.group_id}`)} className="hover:text-blue-600 cursor-pointer transition-colors">{groupName}</button>
-        <Chevron />
-        <span className="text-slate-600 font-medium">{student.last_name} {student.first_name}</span>
-      </nav>
+    <Box sx={{ p: 4, maxWidth: 900 }}>
+      <Breadcrumbs separator={<ChevronRightRounded sx={{ fontSize: 14 }} />} sx={{ mb: 3, fontSize: 13 }}>
+        <Link underline="hover" sx={{ cursor: 'pointer' }} color="inherit" onClick={() => navigate('/groups')}>Группы</Link>
+        <Link underline="hover" sx={{ cursor: 'pointer' }} color="inherit" onClick={() => navigate(`/groups/${student.group_id}`)}>{groupName}</Link>
+        <Typography fontSize={13} color="text.primary" fontWeight={500}>{student.last_name} {student.first_name}</Typography>
+      </Breadcrumbs>
 
-      {/* Шапка */}
-      <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm mb-6">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-            <span className="text-lg font-semibold text-blue-600">{student.last_name[0]}</span>
-          </div>
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold text-slate-800">{fullName}</h1>
-            <div className="flex items-center gap-3 mt-1">
-              <button
-                onClick={() => navigate(`/groups/${student.group_id}`)}
-                className="text-sm text-blue-600 hover:underline cursor-pointer"
-              >
-                {groupName}
-              </button>
-              {student.student_num && (
-                <span className="text-slate-400 text-sm">· №{student.student_num}</span>
-              )}
-            </div>
-          </div>
-          <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-medium ${
-            student.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-          }`}>
-            {student.is_active ? 'Активен' : 'Неактивен'}
-          </span>
-        </div>
+      {/* Header */}
+      <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+          <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Typography variant="h6" fontWeight={700} sx={{ color: '#1D4ED8' }}>{student.last_name[0]}</Typography>
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="h6" fontWeight={600}>{fullName}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
+              <Link underline="hover" sx={{ cursor: 'pointer', fontSize: 13 }} onClick={() => navigate(`/groups/${student.group_id}`)}>{groupName}</Link>
+              {student.student_num && <Typography variant="caption" color="text.secondary">· №{student.student_num}</Typography>}
+            </Box>
+          </Box>
+          <Chip
+            label={student.is_active ? 'Активен' : 'Неактивен'}
+            size="small"
+            sx={student.is_active ? { bgcolor: '#D4EDDF', color: '#347856' } : { bgcolor: '#F1F5F9', color: '#64748b' }}
+          />
+        </Box>
 
-        <div className="grid grid-cols-4 gap-4 mt-5 pt-5 border-t border-slate-100">
-          <Stat label="Средний балл" value={avgGrade ?? '—'} />
-          <Stat label="Оценок" value={numericGrades.length} />
-          <Stat label="Посещаемость" value={attendanceRate !== null ? `${attendanceRate}%` : '—'} />
-          <Stat label="Тестов пройдено" value={`${passedSessions.length} / ${sessions.length}`} />
-        </div>
-      </div>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, mt: 2.5, pt: 2.5, borderTop: 1, borderColor: 'divider' }}>
+          {[
+            { label: 'Средний балл', value: avgGrade ?? '—' },
+            { label: 'Оценок', value: numericGrades.length },
+            { label: 'Посещаемость', value: attendanceRate !== null ? `${attendanceRate}%` : '—' },
+            { label: 'Тестов пройдено', value: `${passedSessions.length} / ${sessions.length}` },
+          ].map(s => (
+            <Box key={s.label}>
+              <Typography variant="caption" color="text.secondary">{s.label}</Typography>
+              <Typography variant="h5" fontWeight={700} sx={{ color: WARM[800] }}>{s.value}</Typography>
+            </Box>
+          ))}
+        </Box>
+      </Paper>
 
-      {/* Блок преподавателя: что он преподаёт и как успевает студент */}
+      {/* Teacher block */}
       {isTeacher && teacherBlocks.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 mb-6">
-          <div className="flex items-center gap-2 mb-4">
-            <svg className="w-4 h-4 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-            </svg>
-            <h2 className="text-sm font-semibold text-blue-800">Ваши предметы у этого студента</h2>
-          </div>
-          <div className="space-y-3">
+        <Paper elevation={0} sx={{ bgcolor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 3, p: 3, mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <VerifiedRounded sx={{ fontSize: 18, color: '#1D4ED8' }} />
+            <Typography variant="body2" fontWeight={600} sx={{ color: '#1E40AF' }}>Ваши предметы у этого студента</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             {teacherBlocks.map(({ assignment, subject, grades, attendance }) => {
-              const numericGrades = grades.filter(g => g.value !== null)
-              const avg = numericGrades.length > 0
-                ? (numericGrades.reduce((s, g) => s + (g.value ?? 0), 0) / numericGrades.length).toFixed(1)
-                : null
+              const nums = grades.filter(g => g.value !== null)
+              const avg = nums.length > 0 ? (nums.reduce((s, g) => s + (g.value ?? 0), 0) / nums.length).toFixed(1) : null
               const present = attendance.filter(a => a.is_present).length
               const attRate = attendance.length > 0 ? Math.round(present / attendance.length * 100) : null
-              const recentGrades = [...grades]
-                .sort((a, b) => b.date_recorded.localeCompare(a.date_recorded))
-                .slice(0, 5)
+              const recentGrades = [...grades].sort((a, b) => b.date_recorded.localeCompare(a.date_recorded)).slice(0, 5)
 
               return (
-                <div key={assignment.id} className="bg-white rounded-lg border border-blue-100 p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-slate-800 text-sm">{subject.name}</span>
-                      <span className="text-xs text-slate-400">{assignment.acad_year} · {assignment.semester} сем.</span>
+                <Paper key={assignment.id} elevation={0} sx={{ p: 2, border: '1px solid #BFDBFE', borderRadius: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Typography variant="body2" fontWeight={500}>{subject.name}</Typography>
+                      <Typography variant="caption" color="text.secondary">{assignment.acad_year} · {assignment.semester} сем.</Typography>
                       {assignment.control_form && (
-                        <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">{assignment.control_form}</span>
+                        <Chip label={assignment.control_form} size="small" sx={{ bgcolor: '#DBEAFE', color: '#1D4ED8', height: 20, fontSize: 11 }} />
                       )}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => navigate(`/assignments/${assignment.id}?tab=grades`)}
-                        className="flex items-center gap-1 px-2.5 py-1 text-xs text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
-                      >
-                        Все оценки
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => navigate(`/assignments/${assignment.id}?tab=attendance`)}
-                        className="flex items-center gap-1 px-2.5 py-1 text-xs text-emerald-600 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors cursor-pointer"
-                      >
-                        Посещаемость
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Успеваемость */}
-                    <div>
-                      <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wide">Успеваемость</p>
-                      {grades.length === 0 ? (
-                        <p className="text-xs text-slate-400">Оценок нет</p>
-                      ) : (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-slate-500">Средний балл:</span>
-                            {avg !== null ? (
-                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                Number(avg) >= 4 ? 'bg-emerald-100 text-emerald-700' :
-                                Number(avg) >= 3 ? 'bg-blue-100 text-blue-700' :
-                                'bg-red-100 text-red-700'
-                              }`}>{avg}</span>
-                            ) : <span className="text-xs text-slate-400">—</span>}
-                          </div>
-                          <p className="text-xs text-slate-400">{grades.length} оценок всего</p>
-                          {recentGrades.length > 0 && (
-                            <div className="mt-2 space-y-1">
-                              {recentGrades.map(g => (
-                                <div key={g.id} className="flex items-center justify-between">
-                                  <span className="text-xs text-slate-400">{String(g.date_recorded).slice(0, 10)} · {GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}</span>
-                                  {g.value !== null ? (
-                                    <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold ${
-                                      g.value >= 4 ? 'bg-emerald-100 text-emerald-700' :
-                                      g.value >= 3 ? 'bg-blue-100 text-blue-700' :
-                                      'bg-red-100 text-red-700'
-                                    }`}>{g.value}</span>
-                                  ) : g.passed !== null ? (
-                                    <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-semibold ${g.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                                      {g.passed ? 'Зачёт' : 'Незачёт'}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              ))}
-                              {grades.length > 5 && (
-                                <button
-                                  onClick={() => navigate(`/assignments/${assignment.id}?tab=grades`)}
-                                  className="text-xs text-blue-500 hover:text-blue-700 mt-1 transition-colors cursor-pointer"
-                                >
-                                  Ещё {grades.length - 5} оценок →
-                                </button>
-                              )}
-                            </div>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button variant="outlined" size="small" sx={{ fontSize: 11 }} onClick={() => navigate(`/assignments/${assignment.id}?tab=grades`)}>Все оценки</Button>
+                      <Button variant="outlined" size="small" color="success" sx={{ fontSize: 11 }} onClick={() => navigate(`/assignments/${assignment.id}?tab=attendance`)}>Посещаемость</Button>
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 3 }}>
+                    <Box>
+                      <Typography variant="caption" color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, display: 'block', mb: 1 }}>Успеваемость</Typography>
+                      {grades.length === 0 ? <Typography variant="caption" color="text.disabled">Оценок нет</Typography> : (
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">Средний балл:</Typography>
+                            {avg !== null ? <Chip label={avg} size="small" sx={gradeChip(Number(avg))} /> : <Typography variant="caption" color="text.disabled">—</Typography>}
+                          </Box>
+                          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 1 }}>{grades.length} оценок всего</Typography>
+                          {recentGrades.map(g => (
+                            <Box key={g.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.25 }}>
+                              <Typography variant="caption" color="text.secondary">{String(g.date_recorded).slice(0, 10)} · {GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}</Typography>
+                              {g.value !== null ? <Chip label={g.value} size="small" sx={{ ...gradeChip(g.value), height: 18, fontSize: 10 }} /> :
+                               g.passed !== null ? <Chip label={g.passed ? 'Зачёт' : 'Незачёт'} size="small" sx={{ ...(g.passed ? { bgcolor: '#D4EDDF', color: '#347856' } : { bgcolor: '#F4D0CC', color: '#D05050' }), height: 18, fontSize: 10 }} /> : null}
+                            </Box>
+                          ))}
+                          {grades.length > 5 && (
+                            <Typography variant="caption" sx={{ color: 'primary.main', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }} onClick={() => navigate(`/assignments/${assignment.id}?tab=grades`)}>
+                              Ещё {grades.length - 5} оценок →
+                            </Typography>
                           )}
-                        </div>
+                        </Box>
                       )}
-                    </div>
-                    {/* Посещаемость */}
-                    <div>
-                      <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wide">Посещаемость</p>
-                      {attendance.length === 0 ? (
-                        <p className="text-xs text-slate-400">Нет записей</p>
-                      ) : (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-slate-500">Процент:</span>
-                            {attRate !== null ? (
-                              <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                attRate >= 75 ? 'bg-emerald-100 text-emerald-700' :
-                                attRate >= 50 ? 'bg-amber-100 text-amber-700' :
-                                'bg-red-100 text-red-700'
-                              }`}>{attRate}%</span>
-                            ) : null}
-                          </div>
-                          <p className="text-xs text-slate-400">{present} из {attendance.length} занятий</p>
-                          {attRate !== null && (
-                            <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${attRate >= 75 ? 'bg-emerald-500' : attRate >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                                style={{ width: `${attRate}%` }}
-                              />
-                            </div>
-                          )}
-                        </div>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, display: 'block', mb: 1 }}>Посещаемость</Typography>
+                      {attendance.length === 0 ? <Typography variant="caption" color="text.disabled">Нет записей</Typography> : (
+                        <Box>
+                          {attRate !== null && <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                            <Typography variant="caption" color="text.secondary">Процент:</Typography>
+                            <Chip label={`${attRate}%`} size="small" sx={attRate >= 75 ? { bgcolor: '#D4EDDF', color: '#347856' } : attRate >= 50 ? { bgcolor: '#FEF3C7', color: '#92400E' } : { bgcolor: '#F4D0CC', color: '#D05050' }} />
+                          </Box>}
+                          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mb: 1 }}>{present} из {attendance.length} занятий</Typography>
+                          {attRate !== null && <LinearProgress variant="determinate" value={attRate} sx={{ height: 6, borderRadius: 3, bgcolor: '#e2e8f0', '& .MuiLinearProgress-bar': { bgcolor: attRate >= 75 ? '#347856' : attRate >= 50 ? '#C9874A' : '#D05050', borderRadius: 3 } }} />}
+                        </Box>
                       )}
-                    </div>
-                  </div>
-                </div>
+                    </Box>
+                  </Box>
+                </Paper>
               )
             })}
-          </div>
-        </div>
+          </Box>
+        </Paper>
       )}
 
-      {/* Предметы */}
-      <Section title="Предметы" subtitle={`${subjects.length} дисциплин`}>
+      {/* Subjects accordion */}
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 2 }}>
+          <Typography variant="subtitle1" fontWeight={600}>Предметы</Typography>
+          <Typography variant="caption" color="text.disabled">{subjects.length} дисциплин</Typography>
+        </Box>
+
         {subjects.length === 0 ? (
-          <Empty text="Нет данных по предметам" />
+          <Paper sx={{ p: 5, textAlign: 'center' }}><Typography color="text.secondary">Нет данных по предметам</Typography></Paper>
         ) : (
-          <div className="space-y-2">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {subjects.map(subj => {
               const present = subj.attendance.filter(a => a.is_present).length
               const rate = subj.attendance.length > 0 ? Math.round(present / subj.attendance.length * 100) : null
               const nums = subj.grades.filter(g => g.value !== null)
-              const avg = nums.length > 0
-                ? (nums.reduce((s, g) => s + (g.value ?? 0), 0) / nums.length).toFixed(1)
-                : null
+              const avg = nums.length > 0 ? (nums.reduce((s, g) => s + (g.value ?? 0), 0) / nums.length).toFixed(1) : null
               const isOpen = expandedSubject === subj.id
-              const recentGrades = [...subj.grades]
-                .sort((a, b) => b.date_recorded.localeCompare(a.date_recorded))
-                .slice(0, 5)
+              const recentGrades = [...subj.grades].sort((a, b) => b.date_recorded.localeCompare(a.date_recorded)).slice(0, 5)
 
               return (
-                <div key={subj.id} className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-                  <button
-                    onClick={() => setExpandedSubject(isOpen ? null : subj.id)}
-                    className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`}
-                        fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                      <span className="font-medium text-slate-800 text-sm">{subj.name}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {avg !== null && (
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                          Number(avg) >= 4 ? 'bg-emerald-100 text-emerald-700' :
-                          Number(avg) >= 3 ? 'bg-blue-100 text-blue-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>ср. {avg}</span>
-                      )}
-                      {rate !== null && (
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                          rate >= 75 ? 'bg-emerald-100 text-emerald-700' :
-                          rate >= 50 ? 'bg-amber-100 text-amber-600' :
-                          'bg-red-100 text-red-600'
-                        }`}>{rate}% посещ.</span>
-                      )}
-                      <span className="text-xs text-slate-400">{subj.grades.length} оц. · {subj.attendance.length} зан.</span>
-                    </div>
-                  </button>
-
-                  {isOpen && (
-                    <div className="border-t border-slate-100 px-5 py-4 grid grid-cols-2 gap-6">
-                      {/* Посещаемость */}
-                      <div>
-                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Посещаемость</p>
-                        {subj.attendance.length === 0 ? (
-                          <p className="text-xs text-slate-400">Нет записей</p>
-                        ) : (
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">Всего занятий</span>
-                              <span className="font-medium text-slate-700">{subj.attendance.length}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">Присутствовал</span>
-                              <span className="font-medium text-emerald-600">{present}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-slate-500">Отсутствовал</span>
-                              <span className="font-medium text-red-500">{subj.attendance.length - present}</span>
-                            </div>
-                            {rate !== null && (
-                              <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full ${rate >= 75 ? 'bg-emerald-500' : rate >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                                  style={{ width: `${rate}%` }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Последние оценки */}
-                      <div>
-                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">
-                          Последние оценки {subj.grades.length > 5 ? `(из ${subj.grades.length})` : ''}
-                        </p>
-                        {recentGrades.length === 0 ? (
-                          <p className="text-xs text-slate-400">Нет оценок</p>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {recentGrades.map(g => (
-                              <div key={g.id} className="flex items-center justify-between text-sm">
-                                <span className="text-slate-500">{String(g.date_recorded).slice(0, 10)} · {GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}</span>
-                                {g.value !== null ? (
-                                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                    g.value >= 4 ? 'bg-emerald-100 text-emerald-700' :
-                                    g.value >= 3 ? 'bg-blue-100 text-blue-700' :
-                                    'bg-red-100 text-red-700'
-                                  }`}>{g.value}</span>
-                                ) : g.passed !== null ? (
-                                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                    g.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-                                  }`}>{g.passed ? 'Зачёт' : 'Незачёт'}</span>
-                                ) : <span className="text-slate-400">—</span>}
-                              </div>
+                <Paper key={subj.id} elevation={1} sx={{ overflow: 'hidden' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 2, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                    onClick={() => setExpandedSubject(isOpen ? null : subj.id)}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <ChevronRightRounded sx={{ fontSize: 16, color: 'text.disabled', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                      <Typography variant="body2" fontWeight={500}>{subj.name}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      {avg !== null && <Chip label={`ср. ${avg}`} size="small" sx={gradeChip(Number(avg))} />}
+                      {rate !== null && <Chip label={`${rate}% посещ.`} size="small" sx={rate >= 75 ? { bgcolor: '#D4EDDF', color: '#347856' } : rate >= 50 ? { bgcolor: '#FEF3C7', color: '#92400E' } : { bgcolor: '#F4D0CC', color: '#D05050' }} />}
+                      <Typography variant="caption" color="text.disabled">{subj.grades.length} оц. · {subj.attendance.length} зан.</Typography>
+                    </Box>
+                  </Box>
+                  <Collapse in={isOpen} unmountOnExit>
+                    <Box sx={{ borderTop: 1, borderColor: 'divider', px: 3, py: 2.5, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                      <Box>
+                        <Typography variant="caption" color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, display: 'block', mb: 1.5 }}>Посещаемость</Typography>
+                        {subj.attendance.length === 0 ? <Typography variant="caption" color="text.disabled">Нет записей</Typography> : (
+                          <Box>
+                            {[['Всего занятий', subj.attendance.length, 'text.primary'], ['Присутствовал', present, '#347856'], ['Отсутствовал', subj.attendance.length - present, '#D05050']].map(([label, val, color]) => (
+                              <Box key={String(label)} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                                <Typography variant="body2" color="text.secondary">{label}</Typography>
+                                <Typography variant="body2" fontWeight={500} sx={{ color }}>{val}</Typography>
+                              </Box>
                             ))}
-                          </div>
+                            {rate !== null && <LinearProgress variant="determinate" value={rate} sx={{ height: 6, borderRadius: 3, mt: 1, bgcolor: '#e2e8f0', '& .MuiLinearProgress-bar': { bgcolor: rate >= 75 ? '#347856' : rate >= 50 ? '#C9874A' : '#D05050', borderRadius: 3 } }} />}
+                          </Box>
                         )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, display: 'block', mb: 1.5 }}>
+                          Последние оценки{subj.grades.length > 5 ? ` (из ${subj.grades.length})` : ''}
+                        </Typography>
+                        {recentGrades.length === 0 ? <Typography variant="caption" color="text.disabled">Нет оценок</Typography> : (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                            {recentGrades.map(g => (
+                              <Box key={g.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <Typography variant="caption" color="text.secondary">{String(g.date_recorded).slice(0, 10)} · {GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}</Typography>
+                                {g.value !== null ? <Chip label={g.value} size="small" sx={{ ...gradeChip(g.value), height: 20, fontSize: 11 }} /> :
+                                 g.passed !== null ? <Chip label={g.passed ? 'Зачёт' : 'Незачёт'} size="small" sx={{ ...(g.passed ? { bgcolor: '#D4EDDF', color: '#347856' } : { bgcolor: '#F4D0CC', color: '#D05050' }), height: 20, fontSize: 11 }} /> :
+                                 <Typography variant="caption" color="text.disabled">—</Typography>}
+                              </Box>
+                            ))}
+                          </Box>
+                        )}
+                      </Box>
+                    </Box>
+                  </Collapse>
+                </Paper>
               )
             })}
-          </div>
+          </Box>
         )}
-      </Section>
+      </Box>
 
-      {/* Тесты */}
-      <Section title="Тесты" subtitle={`${sessions.length} сессий`} className="mt-6">
+      {/* Tests */}
+      <Box>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 2 }}>
+          <Typography variant="subtitle1" fontWeight={600}>Тесты</Typography>
+          <Typography variant="caption" color="text.disabled">{sessions.length} сессий</Typography>
+        </Box>
         {sessions.length === 0 ? (
-          <Empty text="Тестов нет" />
+          <Paper sx={{ p: 5, textAlign: 'center' }}><Typography color="text.secondary">Тестов нет</Typography></Paper>
         ) : (
-          <div className="grid grid-cols-2 gap-4">
-            {/* Пройденные */}
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
-                  Пройдено ({passedSessions.length})
-                </p>
-              </div>
-              {passedSessions.length === 0 ? (
-                <p className="px-4 py-4 text-xs text-slate-400">Нет пройденных тестов</p>
-              ) : (
-                <div className="divide-y divide-slate-50">
-                  {passedSessions.map(s => {
-                    const pct = s.score_max && s.score_max > 0 ? Math.round((s.score_total ?? 0) / s.score_max * 100) : null
-                    return (
-                      <div key={s.id} className="px-4 py-2.5 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-slate-700">Тест #{s.test_id}</p>
-                          <p className="text-xs text-slate-400">{s.started_at.slice(0, 10)}</p>
-                        </div>
-                        <div className="text-right">
-                          {pct !== null && (
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              pct >= 75 ? 'bg-emerald-100 text-emerald-700' :
-                              pct >= 50 ? 'bg-blue-100 text-blue-700' :
-                              'bg-amber-100 text-amber-700'
-                            }`}>{pct}%</span>
-                          )}
-                          {s.score_total !== null && s.score_max !== null && (
-                            <p className="text-xs text-slate-400 mt-0.5">{s.score_total}/{s.score_max}</p>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Не пройденные / в процессе */}
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 bg-red-50 border-b border-red-100 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-red-500" />
-                <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">
-                  Не пройдено ({failedSessions.length + inProgressSessions.length})
-                </p>
-              </div>
-              {failedSessions.length + inProgressSessions.length === 0 ? (
-                <p className="px-4 py-4 text-xs text-slate-400">Все тесты пройдены</p>
-              ) : (
-                <div className="divide-y divide-slate-50">
-                  {[...failedSessions, ...inProgressSessions].map(s => {
-                    const pct = s.score_max && s.score_max > 0 ? Math.round((s.score_total ?? 0) / s.score_max * 100) : null
-                    return (
-                      <div key={s.id} className="px-4 py-2.5 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-slate-700">Тест #{s.test_id}</p>
-                          <p className="text-xs text-slate-400">{s.started_at.slice(0, 10)}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                            s.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-600'
-                          }`}>
-                            {s.status === 'in_progress' ? 'В процессе' : 'Не сдан'}
-                          </span>
-                          {pct !== null && (
-                            <p className="text-xs text-slate-400 mt-0.5">{s.score_total}/{s.score_max}</p>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            {[
+              { label: `Пройдено (${passedSessions.length})`, sessions: passedSessions, emptyText: 'Нет пройденных тестов', headerSx: { bgcolor: '#ECFDF5', borderColor: '#A7F3D0' }, dotColor: '#347856', emptyColor: '#D4EDDF' },
+              { label: `Не пройдено (${failedSessions.length + inProgressSessions.length})`, sessions: [...failedSessions, ...inProgressSessions], emptyText: 'Все тесты пройдены', headerSx: { bgcolor: '#FEF2F2', borderColor: '#FECACA' }, dotColor: '#D05050', emptyColor: '#F4D0CC' },
+            ].map(col => (
+              <Paper key={col.label} elevation={1} sx={{ overflow: 'hidden' }}>
+                <Box sx={{ ...col.headerSx, px: 2.5, py: 1.5, borderBottom: '1px solid', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: col.dotColor }} />
+                  <Typography variant="caption" fontWeight={700} sx={{ textTransform: 'uppercase', letterSpacing: 1, color: col.dotColor }}>{col.label}</Typography>
+                </Box>
+                {col.sessions.length === 0 ? (
+                  <Typography sx={{ px: 2.5, py: 3, fontSize: 12, color: 'text.disabled' }}>{col.emptyText}</Typography>
+                ) : (
+                  <Box>
+                    {col.sessions.map(s => {
+                      const pct = s.score_max && s.score_max > 0 ? Math.round((s.score_total ?? 0) / s.score_max * 100) : null
+                      return (
+                        <Box key={s.id} sx={{ px: 2.5, py: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 } }}>
+                          <Box>
+                            <Typography variant="body2">Тест #{s.test_id}</Typography>
+                            <Typography variant="caption" color="text.disabled">{s.started_at.slice(0, 10)}</Typography>
+                          </Box>
+                          <Box sx={{ textAlign: 'right' }}>
+                            {pct !== null && <Chip label={`${pct}%`} size="small" sx={pct >= 75 ? { bgcolor: '#D4EDDF', color: '#347856' } : pct >= 50 ? { bgcolor: '#DBEAFE', color: '#1D4ED8' } : { bgcolor: '#F4D0CC', color: '#D05050' }} />}
+                            {s.status === 'in_progress' && <Chip label="В процессе" size="small" sx={{ bgcolor: '#DBEAFE', color: '#1D4ED8', display: 'block', mt: 0.5 }} />}
+                            {s.score_total !== null && s.score_max !== null && (
+                              <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.25 }}>{s.score_total}/{s.score_max}</Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      )
+                    })}
+                  </Box>
+                )}
+              </Paper>
+            ))}
+          </Box>
         )}
-      </Section>
-    </div>
+      </Box>
+    </Box>
   )
-}
-
-function Section({ title, subtitle, children, className = '' }: {
-  title: string; subtitle?: string; children: React.ReactNode; className?: string
-}) {
-  return (
-    <div className={className}>
-      <div className="flex items-baseline gap-2 mb-3">
-        <h2 className="text-base font-semibold text-slate-700">{title}</h2>
-        {subtitle && <span className="text-xs text-slate-400">{subtitle}</span>}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div>
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className="text-xl font-bold text-slate-800 mt-0.5">{value}</p>
-    </div>
-  )
-}
-
-function Chevron() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  )
-}
-function Spinner() {
-  return (
-    <div className="p-8 flex items-center gap-3 text-slate-400">
-      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      Загрузка...
-    </div>
-  )
-}
-function Empty({ text }: { text: string }) {
-  return <div className="bg-white rounded-xl border border-slate-100 p-8 text-center text-slate-400 shadow-sm text-sm">{text}</div>
 }

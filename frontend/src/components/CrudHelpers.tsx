@@ -1,63 +1,53 @@
 import type { ReactNode } from 'react'
+import {
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Button, Typography, Box,
+} from '@mui/material'
+import { EditRounded, DeleteRounded } from '@mui/icons-material'
 
 export function Overlay({ onClose, children }: { onClose: () => void; children: ReactNode }) {
   return (
-    <div
-      className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
-        {children}
-      </div>
-    </div>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <Box sx={{ p: 1 }}>{children}</Box>
+    </Dialog>
   )
 }
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="mb-4">
-      <label className="block text-sm font-medium text-slate-700 mb-1">{label}</label>
+    <Box sx={{ mb: 2.5 }}>
+      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, mb: 0.5, display: 'block', fontSize: 12 }}>
+        {label}
+      </Typography>
       {children}
-    </div>
+    </Box>
   )
 }
 
 export function ConfirmDelete({ text, onConfirm, onCancel }: {
-  text: string
-  onConfirm: () => void
-  onCancel: () => void
+  text: string; onConfirm: () => void; onCancel: () => void
 }) {
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
-        <p className="text-slate-700 text-sm mb-5">{text}</p>
-        <div className="flex justify-end gap-3">
-          <button onClick={onCancel} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">
-            Отмена
-          </button>
-          <button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors">
-            Удалить
-          </button>
-        </div>
-      </div>
-    </div>
+    <Dialog open onClose={onCancel} maxWidth="xs" fullWidth>
+      <DialogTitle sx={{ fontSize: 15, fontWeight: 600 }}>Подтвердите удаление</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary">{text}</Typography>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
+        <Button onClick={onCancel} variant="outlined" size="small">Отмена</Button>
+        <Button onClick={onConfirm} variant="contained" size="small"
+          sx={{ bgcolor: '#D05050', '&:hover': { bgcolor: '#B03838' } }}>
+          Удалить
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
 export function PencilIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M15.232 5.232l3.536 3.536M9 13l6.5-6.5a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H8v-2.414A2 2 0 018.586 12.5z" />
-    </svg>
-  )
+  return <EditRounded sx={{ fontSize: 16 }} />
 }
 
 export function TrashIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4h6v3M4 7h16" />
-    </svg>
-  )
+  return <DeleteRounded sx={{ fontSize: 16 }} />
 }

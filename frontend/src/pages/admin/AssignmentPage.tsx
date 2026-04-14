@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  Box, Paper, Typography, Chip, CircularProgress, Breadcrumbs, Link,
+  Table, TableHead, TableBody, TableRow, TableCell, Collapse,
+  Tab, Tabs, Select, MenuItem, Button,
+} from '@mui/material'
+import { ChevronRightRounded, ExpandMoreRounded, ChevronRightRounded as ChevronExpandIcon } from '@mui/icons-material'
 import client from '../../api/client'
 import type { TeachingAssignment, Subject, StudentProfile, GradeOut, AttendanceRecord, TeacherProfile } from '../../api/resources'
 import { updateAssignment } from '../../api/resources'
 import { useSort } from '../../hooks/useSort'
 import SortableHeader from '../../components/SortableHeader'
+import { WARM } from '../../theme'
 
 const CONTROL_FORMS = ['Экзамен', 'Зачёт', 'Дифференцированный зачёт', 'Контрольная работа', 'Курсовая работа', 'Реферат']
 
-type Tab = 'grades' | 'attendance'
+type Tab_ = 'grades' | 'attendance'
 
 interface DateRow {
   date: string
@@ -22,6 +29,11 @@ const GRADE_TYPE_LABELS: Record<string, string> = {
   test: 'Тест', exam: 'Экзамен', credit: 'Зачёт',
 }
 
+const gradeChip = (v: number) =>
+  v >= 4 ? { bgcolor: '#D4EDDF', color: '#347856' } :
+  v >= 3 ? { bgcolor: '#DBEAFE', color: '#1D4ED8' } :
+           { bgcolor: '#F4D0CC', color: '#D05050' }
+
 export default function AssignmentPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -34,8 +46,8 @@ export default function AssignmentPage() {
   const [students, setStudents] = useState<StudentProfile[]>([])
   const [grades, setGrades] = useState<GradeOut[]>([])
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
-  const initialTab = (searchParams.get('tab') as Tab | null) ?? 'grades'
-  const [tab, setTab] = useState<Tab>(initialTab)
+  const initialTab = searchParams.get('tab') === 'attendance' ? 1 : 0
+  const [tabIdx, setTabIdx] = useState(initialTab)
   const [expandedDate, setExpandedDate] = useState<string | null>(null)
   const [expandedStudent, setExpandedStudent] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
@@ -66,11 +78,7 @@ export default function AssignmentPage() {
         setStudents(studs)
         setGrades(gr)
         setAttendance(att)
-      } catch {
-        // silent
-      } finally {
-        setLoading(false)
-      }
+      } catch { /* silent */ } finally { setLoading(false) }
     }
     init()
   }, [id])
@@ -78,7 +86,6 @@ export default function AssignmentPage() {
   const studentMap: Record<number, StudentProfile> = {}
   for (const s of students) studentMap[s.id] = s
 
-  // Attendance: group by date
   const byDate: Record<string, AttendanceRecord[]> = {}
   for (const r of attendance) {
     const d = String(r.lesson_date).slice(0, 10)
@@ -87,22 +94,14 @@ export default function AssignmentPage() {
   }
   const dateRows: DateRow[] = Object.entries(byDate)
     .sort(([a], [b]) => b.localeCompare(a))
-    .map(([date, records]) => ({
-      date, total: records.length,
-      present: records.filter(r => r.is_present).length,
-      records,
-    }))
+    .map(([date, records]) => ({ date, total: records.length, present: records.filter(r => r.is_present).length, records }))
 
-  // Grades: group by student_id
   const gradesByStudent: Record<number, GradeOut[]> = {}
   for (const g of grades) {
     if (!gradesByStudent[g.student_id]) gradesByStudent[g.student_id] = []
     gradesByStudent[g.student_id].push(g)
   }
-
-  const studentGradeRows = Object.entries(gradesByStudent).map(([sid, sGrades]) => ({
-    sid: Number(sid), sGrades,
-  }))
+  const studentGradeRows = Object.entries(gradesByStudent).map(([sid, sGrades]) => ({ sid: Number(sid), sGrades }))
 
   const { sorted: sortedStudents, sortKey: gradesSortKey, sortDir: gradesSortDir, toggleSort: gradesToggleSort } = useSort(studentGradeRows, (row, key) => {
     const s = studentMap[row.sid]
@@ -123,11 +122,10 @@ export default function AssignmentPage() {
     return ''
   })
 
-  if (loading) return <Spinner />
-  if (!assignment) return <div className="p-8 text-slate-400">Назначение не найдено</div>
+  if (loading) return <Spin />
+  if (!assignment) return <Typography sx={{ p: 4 }} color="text.secondary">Назначение не найдено</Typography>
 
   const teacherName = teacher ? `${teacher.last_name} ${teacher.first_name}` : ''
-
   const totalPresent = attendance.filter(r => r.is_present).length
   const attendanceRate = attendance.length > 0 ? Math.round(totalPresent / attendance.length * 100) : null
   const numericGrades = grades.filter(g => g.value !== null)
@@ -136,338 +134,274 @@ export default function AssignmentPage() {
     : null
 
   return (
-    <div className="p-8 max-w-5xl">
-      {/* Хлебные крошки */}
-      <nav className="flex items-center flex-wrap gap-1.5 text-sm text-slate-400 mb-6">
-        <button onClick={() => navigate('/teachers')} className="hover:text-blue-600 cursor-pointer transition-colors">Преподаватели</button>
-        <Chevron />
+    <Box sx={{ p: 4, maxWidth: 900 }}>
+      {/* Breadcrumbs */}
+      <Breadcrumbs separator={<ChevronRightRounded sx={{ fontSize: 14 }} />} sx={{ mb: 3, fontSize: 13 }}>
+        <Link underline="hover" sx={{ cursor: 'pointer' }} color="inherit" onClick={() => navigate('/teachers')}>Преподаватели</Link>
         {teacher && (
-          <>
-            <button onClick={() => navigate(`/teachers/${assignment.teacher_id}`)} className="hover:text-blue-600 cursor-pointer transition-colors">
-              {teacherName}
-            </button>
-            <Chevron />
-          </>
+          <Link underline="hover" sx={{ cursor: 'pointer' }} color="inherit" onClick={() => navigate(`/teachers/${assignment.teacher_id}`)}>
+            {teacherName}
+          </Link>
         )}
-        <button onClick={() => navigate(`/groups/${assignment.group_id}`)} className="hover:text-blue-600 cursor-pointer transition-colors">
+        <Link underline="hover" sx={{ cursor: 'pointer' }} color="inherit" onClick={() => navigate(`/groups/${assignment.group_id}`)}>
           {groupName}
-        </button>
-        <Chevron />
-        <span className="text-slate-600 font-medium">{subject?.name ?? `Предмет #${assignment.subject_id}`}</span>
-      </nav>
+        </Link>
+        <Typography fontSize={13} color="text.primary" fontWeight={500}>{subject?.name ?? `Предмет #${assignment.subject_id}`}</Typography>
+      </Breadcrumbs>
 
-      {/* Шапка */}
-      <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm mb-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-800">{subject?.name}</h1>
-            <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm text-slate-500">
-              <button onClick={() => navigate(`/groups/${assignment.group_id}`)} className="text-blue-600 hover:underline cursor-pointer">
-                {groupName}
-              </button>
-              {teacher && (
-                <>
-                  <span>·</span>
-                  <button onClick={() => navigate(`/teachers/${assignment.teacher_id}`)} className="text-blue-600 hover:underline cursor-pointer">
-                    {teacherName}
-                  </button>
-                </>
-              )}
-              <span>· {assignment.acad_year}, сем. {assignment.semester}</span>
-              {editControlForm ? (
-                <span className="flex items-center gap-1.5">
-                  ·
-                  <select
-                    value={controlFormValue}
-                    onChange={e => setControlFormValue(e.target.value)}
-                    className="border border-slate-200 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">— не указана —</option>
-                    {CONTROL_FORMS.map(f => <option key={f} value={f}>{f}</option>)}
-                  </select>
-                  <button
-                    onClick={async () => {
-                      setSavingCF(true)
-                      const updated = await updateAssignment(assignment.id, { control_form: controlFormValue || null })
-                      setAssignment(updated)
-                      setEditControlForm(false)
-                      setSavingCF(false)
-                    }}
-                    disabled={savingCF}
-                    className="text-xs text-blue-600 hover:underline disabled:opacity-50"
-                  >
-                    Сохранить
-                  </button>
-                  <button onClick={() => setEditControlForm(false)} className="text-xs text-slate-400 hover:text-slate-600">
-                    Отмена
-                  </button>
-                </span>
-              ) : (
-                <span
-                  onClick={() => setEditControlForm(true)}
-                  className="cursor-pointer hover:text-blue-600 transition-colors"
-                  title="Изменить форму контроля"
-                >
-                  · {assignment.control_form ?? <span className="text-slate-300">форма контроля не указана</span>}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-4 gap-4 mt-5 pt-5 border-t border-slate-100">
-          <Stat label="Студентов" value={students.length} />
-          <Stat label="Оценок" value={grades.length} />
-          <Stat label="Средний балл" value={avgGrade ?? '—'} />
-          <Stat label="Посещаемость" value={attendanceRate !== null ? `${attendanceRate}%` : '—'} />
-        </div>
-      </div>
-
-      {/* Вкладки */}
-      <div className="flex gap-1 mb-4 bg-slate-100 p-1 rounded-lg w-fit">
-        {([
-          { key: 'grades' as Tab, label: 'Оценки', count: grades.length },
-          { key: 'attendance' as Tab, label: 'Посещаемость', count: attendance.length },
-        ]).map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer ${
-              tab === t.key ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t.label}
-            {t.count > 0 && (
-              <span className={`ml-1.5 text-xs ${tab === t.key ? 'text-blue-600' : 'text-slate-400'}`}>{t.count}</span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Оценки */}
-      {tab === 'grades' && (
-        <>
-          {grades.length === 0 ? <Empty text="Оценок нет" /> : (
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <SortableHeader label="Студент" sortKey="student" currentKey={gradesSortKey} dir={gradesSortDir} onSort={gradesToggleSort} className="px-6" />
-                    <SortableHeader label="Оценок" sortKey="count" currentKey={gradesSortKey} dir={gradesSortDir} onSort={gradesToggleSort} align="right" />
-                    <SortableHeader label="Ср. балл" sortKey="avg" currentKey={gradesSortKey} dir={gradesSortDir} onSort={gradesToggleSort} align="right" />
-                    <th className="w-8" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedStudents.map(({ sid, sGrades }) => {
-                    const student = studentMap[sid]
-                    const nums = sGrades.filter(g => g.value !== null)
-                    const avg = nums.length > 0
-                      ? (nums.reduce((s, g) => s + (g.value ?? 0), 0) / nums.length).toFixed(2)
-                      : null
-                    const isOpen = expandedStudent === sid
-                    return (
-                      <>
-                        <tr
-                          key={sid}
-                          onClick={() => setExpandedStudent(isOpen ? null : sid)}
-                          className="border-t border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors"
-                        >
-                          <td className="px-6 py-3">
-                            <button
-                              onClick={e => { e.stopPropagation(); navigate(`/students/${sid}`) }}
-                              className="text-slate-800 font-medium hover:text-blue-600 hover:underline cursor-pointer text-left"
-                            >
-                              {student ? `${student.last_name} ${student.first_name}${student.middle_name ? ' ' + student.middle_name : ''}` : `Студент #${sid}`}
-                            </button>
-                          </td>
-
-                          <td className="px-4 py-3 text-right text-slate-500">{sGrades.length}</td>
-                          <td className="px-4 py-3 text-right">
-                            {avg !== null ? (
-                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                                Number(avg) >= 4 ? 'bg-emerald-100 text-emerald-700' :
-                                Number(avg) >= 3 ? 'bg-blue-100 text-blue-700' :
-                                'bg-red-100 text-red-700'
-                              }`}>{avg}</span>
-                            ) : <span className="text-slate-400">—</span>}
-                          </td>
-                          <td className="pr-4 text-slate-400 text-right">
-                            <svg className={`w-4 h-4 inline transition-transform ${isOpen ? 'rotate-90' : ''}`}
-                              fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </td>
-                        </tr>
-                        {isOpen && (
-                          <tr key={`${sid}-detail`} className="bg-blue-50/40">
-                            <td colSpan={4} className="px-6 py-3">
-                              <div className="space-y-1">
-                                {[...sGrades].sort((a, b) => b.date_recorded.localeCompare(a.date_recorded)).map(g => (
-                                  <div key={g.id} className="flex items-center justify-between text-sm">
-                                    <span className="text-slate-500">
-                                      {String(g.date_recorded).slice(0, 10)} · {GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}
-                                      {g.comment ? ` · ${g.comment}` : ''}
-                                    </span>
-                                    {g.value !== null ? (
-                                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                        g.value >= 4 ? 'bg-emerald-100 text-emerald-700' :
-                                        g.value >= 3 ? 'bg-blue-100 text-blue-700' :
-                                        'bg-red-100 text-red-700'
-                                      }`}>{g.value}</span>
-                                    ) : g.passed !== null ? (
-                                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                        g.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-                                      }`}>{g.passed ? 'Зачёт' : 'Незачёт'}</span>
-                                    ) : <span className="text-slate-400">—</span>}
-                                  </div>
-                                ))}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+      {/* Header card */}
+      <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" fontWeight={600}>{subject?.name}</Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5, mt: 1, mb: 0 }}>
+          <Link underline="hover" sx={{ cursor: 'pointer', fontSize: 13 }} onClick={() => navigate(`/groups/${assignment.group_id}`)}>
+            {groupName}
+          </Link>
+          {teacher && (
+            <>
+              <Typography variant="caption" color="text.disabled">·</Typography>
+              <Link underline="hover" sx={{ cursor: 'pointer', fontSize: 13 }} onClick={() => navigate(`/teachers/${assignment.teacher_id}`)}>
+                {teacherName}
+              </Link>
+            </>
           )}
-        </>
+          <Typography variant="caption" color="text.secondary">· {assignment.acad_year}, сем. {assignment.semester}</Typography>
+
+          {editControlForm ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="caption" color="text.disabled">·</Typography>
+              <Select
+                size="small"
+                value={controlFormValue}
+                onChange={e => setControlFormValue(e.target.value)}
+                displayEmpty
+                sx={{ fontSize: 12, height: 26 }}
+              >
+                <MenuItem value=""><em>— не указана —</em></MenuItem>
+                {CONTROL_FORMS.map(f => <MenuItem key={f} value={f} sx={{ fontSize: 12 }}>{f}</MenuItem>)}
+              </Select>
+              <Button size="small" variant="text" disabled={savingCF} onClick={async () => {
+                setSavingCF(true)
+                const updated = await updateAssignment(assignment.id, { control_form: controlFormValue || null })
+                setAssignment(updated)
+                setEditControlForm(false)
+                setSavingCF(false)
+              }}>Сохранить</Button>
+              <Button size="small" variant="text" color="inherit" onClick={() => setEditControlForm(false)}>Отмена</Button>
+            </Box>
+          ) : (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ cursor: 'pointer', '&:hover': { color: 'primary.main' } }}
+              onClick={() => setEditControlForm(true)}
+            >
+              · {assignment.control_form ?? <Box component="span" sx={{ color: 'text.disabled' }}>форма контроля не указана</Box>}
+            </Typography>
+          )}
+        </Box>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, mt: 2.5, pt: 2.5, borderTop: 1, borderColor: 'divider' }}>
+          {[
+            { label: 'Студентов', value: students.length },
+            { label: 'Оценок', value: grades.length },
+            { label: 'Средний балл', value: avgGrade ?? '—' },
+            { label: 'Посещаемость', value: attendanceRate !== null ? `${attendanceRate}%` : '—' },
+          ].map(s => (
+            <Box key={s.label}>
+              <Typography variant="caption" color="text.secondary">{s.label}</Typography>
+              <Typography variant="h5" fontWeight={700} sx={{ color: WARM[800] }}>{s.value}</Typography>
+            </Box>
+          ))}
+        </Box>
+      </Paper>
+
+      {/* Tabs */}
+      <Tabs value={tabIdx} onChange={(_, v) => setTabIdx(v)} sx={{ mb: 2 }}>
+        <Tab label={`Оценки${grades.length > 0 ? ` (${grades.length})` : ''}`} />
+        <Tab label={`Посещаемость${attendance.length > 0 ? ` (${attendance.length})` : ''}`} />
+      </Tabs>
+
+      {/* Grades tab */}
+      {tabIdx === 0 && (
+        grades.length === 0 ? <Empty text="Оценок нет" /> : (
+          <Paper elevation={2} sx={{ overflow: 'hidden' }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <SortableHeader label="Студент" sortKey="student" currentKey={gradesSortKey} dir={gradesSortDir} onSort={gradesToggleSort} />
+                  <SortableHeader label="Оценок" sortKey="count" currentKey={gradesSortKey} dir={gradesSortDir} onSort={gradesToggleSort} align="right" />
+                  <SortableHeader label="Ср. балл" sortKey="avg" currentKey={gradesSortKey} dir={gradesSortDir} onSort={gradesToggleSort} align="right" />
+                  <TableCell sx={{ width: 40 }} />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {sortedStudents.map(({ sid, sGrades }) => {
+                  const student = studentMap[sid]
+                  const nums = sGrades.filter(g => g.value !== null)
+                  const avg = nums.length > 0
+                    ? (nums.reduce((s, g) => s + (g.value ?? 0), 0) / nums.length).toFixed(2)
+                    : null
+                  const isOpen = expandedStudent === sid
+                  return (
+                    <>
+                      <TableRow
+                        key={sid}
+                        hover
+                        sx={{ cursor: 'pointer' }}
+                        onClick={() => setExpandedStudent(isOpen ? null : sid)}
+                      >
+                        <TableCell>
+                          <Box
+                            component="span"
+                            sx={{ fontWeight: 500, '&:hover': { color: 'primary.main', textDecoration: 'underline' }, cursor: 'pointer' }}
+                            onClick={e => { e.stopPropagation(); navigate(`/students/${sid}`) }}
+                          >
+                            {student ? `${student.last_name} ${student.first_name}${student.middle_name ? ' ' + student.middle_name : ''}` : `Студент #${sid}`}
+                          </Box>
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: 'text.secondary' }}>{sGrades.length}</TableCell>
+                        <TableCell align="right">
+                          {avg !== null
+                            ? <Chip label={avg} size="small" sx={gradeChip(Number(avg))} />
+                            : <Typography variant="body2" color="text.disabled">—</Typography>}
+                        </TableCell>
+                        <TableCell align="right" sx={{ pr: 2 }}>
+                          <ChevronExpandIcon sx={{ fontSize: 16, color: 'text.disabled', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                        </TableCell>
+                      </TableRow>
+                      <TableRow key={`${sid}-detail`}>
+                        <TableCell colSpan={4} sx={{ p: 0, border: 0 }}>
+                          <Collapse in={isOpen} unmountOnExit>
+                            <Box sx={{ px: 4, py: 2, bgcolor: 'action.hover' }}>
+                              {[...sGrades].sort((a, b) => b.date_recorded.localeCompare(a.date_recorded)).map(g => (
+                                <Box key={g.id} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.5 }}>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {String(g.date_recorded).slice(0, 10)} · {GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}
+                                    {g.comment ? ` · ${g.comment}` : ''}
+                                  </Typography>
+                                  {g.value !== null
+                                    ? <Chip label={g.value} size="small" sx={gradeChip(g.value)} />
+                                    : g.passed !== null
+                                    ? <Chip label={g.passed ? 'Зачёт' : 'Незачёт'} size="small" sx={g.passed ? { bgcolor: '#D4EDDF', color: '#347856' } : { bgcolor: '#F4D0CC', color: '#D05050' }} />
+                                    : <Typography variant="body2" color="text.disabled">—</Typography>}
+                                </Box>
+                              ))}
+                            </Box>
+                          </Collapse>
+                        </TableCell>
+                      </TableRow>
+                    </>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </Paper>
+        )
       )}
 
-      {/* Посещаемость */}
-      {tab === 'attendance' && (
-        <>
-          {attendance.length === 0 ? <Empty text="Записей нет" /> : (
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <SortableHeader label="Дата" sortKey="date" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} className="px-6" />
-                    <SortableHeader label="Всего" sortKey="total" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} align="right" />
-                    <SortableHeader label="Присутствовало" sortKey="present" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} align="right" />
-                    <SortableHeader label="%" sortKey="rate" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} align="right" className="px-6" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedDates.map(row => {
-                    const rate = Math.round(row.present / row.total * 100)
-                    const isOpen = expandedDate === row.date
-                    return (
-                      <>
-                        <tr
-                          key={row.date}
-                          onClick={() => setExpandedDate(isOpen ? null : row.date)}
-                          className="border-t border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors"
-                        >
-                          <td className="px-6 py-3 text-slate-700 font-medium">
-                            <span className="flex items-center gap-2">
-                              <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`}
-                                fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                              {row.date}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right text-slate-500">{row.total}</td>
-                          <td className="px-4 py-3 text-right text-emerald-600 font-medium">{row.present}</td>
-                          <td className="px-6 py-3 text-right">
-                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                              rate >= 75 ? 'bg-emerald-100 text-emerald-700' :
-                              rate >= 50 ? 'bg-amber-100 text-amber-600' :
-                              'bg-red-100 text-red-600'
-                            }`}>{rate}%</span>
-                          </td>
-                        </tr>
-                        {isOpen && (
-                          <tr key={`${row.date}-detail`}>
-                            <td colSpan={4} className="bg-slate-50 px-6 py-4 border-t border-slate-100">
-                              <div className="space-y-3">
-                                <div>
-                                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
-                                    Присутствовали ({row.present})
-                                  </p>
-                                  <div className="flex flex-wrap gap-2">
+      {/* Attendance tab */}
+      {tabIdx === 1 && (
+        attendance.length === 0 ? <Empty text="Записей нет" /> : (
+          <Paper elevation={2} sx={{ overflow: 'hidden' }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <SortableHeader label="Дата" sortKey="date" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} />
+                  <SortableHeader label="Всего" sortKey="total" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} align="right" />
+                  <SortableHeader label="Присутствовало" sortKey="present" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} align="right" />
+                  <SortableHeader label="%" sortKey="rate" currentKey={attSortKey} dir={attSortDir} onSort={attToggleSort} align="right" />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {sortedDates.map(row => {
+                  const rate = Math.round(row.present / row.total * 100)
+                  const isOpen = expandedDate === row.date
+                  const rateSx = rate >= 75 ? { bgcolor: '#D4EDDF', color: '#347856' } :
+                                 rate >= 50 ? { bgcolor: '#FFF3CD', color: '#856404' } :
+                                              { bgcolor: '#F4D0CC', color: '#D05050' }
+                  return (
+                    <>
+                      <TableRow
+                        key={row.date}
+                        hover
+                        sx={{ cursor: 'pointer' }}
+                        onClick={() => setExpandedDate(isOpen ? null : row.date)}
+                      >
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <ChevronExpandIcon sx={{ fontSize: 14, color: 'text.disabled', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                            <Typography variant="body2" fontWeight={500}>{row.date}</Typography>
+                          </Box>
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: 'text.secondary' }}>{row.total}</TableCell>
+                        <TableCell align="right" sx={{ color: '#347856', fontWeight: 500 }}>{row.present}</TableCell>
+                        <TableCell align="right"><Chip label={`${rate}%`} size="small" sx={rateSx} /></TableCell>
+                      </TableRow>
+                      <TableRow key={`${row.date}-detail`}>
+                        <TableCell colSpan={4} sx={{ p: 0, border: 0 }}>
+                          <Collapse in={isOpen} unmountOnExit>
+                            <Box sx={{ px: 4, py: 2, bgcolor: '#f8fafc' }}>
+                              {row.records.filter(r => r.is_present).length > 0 && (
+                                <Box sx={{ mb: 2 }}>
+                                  <Typography variant="caption" color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, display: 'block', mb: 1 }}>
+                                    Присутствовали ({row.records.filter(r => r.is_present).length})
+                                  </Typography>
+                                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                                     {row.records.filter(r => r.is_present).map(r => {
                                       const s = studentMap[r.student_id]
                                       return (
-                                        <button
+                                        <Chip
                                           key={r.id}
+                                          label={s ? `${s.last_name} ${s.first_name}` : `#${r.student_id}`}
+                                          size="small"
                                           onClick={e => { e.stopPropagation(); navigate(`/students/${r.student_id}`) }}
-                                          className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2.5 py-0.5 hover:bg-emerald-100 cursor-pointer transition-colors"
-                                        >
-                                          {s ? `${s.last_name} ${s.first_name}` : `#${r.student_id}`}
-                                        </button>
+                                          sx={{ bgcolor: '#D4EDDF', color: '#347856', cursor: 'pointer' }}
+                                        />
                                       )
                                     })}
-                                  </div>
-                                </div>
-                                {row.records.filter(r => !r.is_present).length > 0 && (
-                                  <div>
-                                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
-                                      Отсутствовали ({row.records.filter(r => !r.is_present).length})
-                                    </p>
-                                    <div className="space-y-1.5">
-                                      {row.records.filter(r => !r.is_present).map(r => {
-                                        const s = studentMap[r.student_id]
-                                        return (
-                                          <div key={r.id} className="flex items-center gap-3 text-xs">
-                                            <button
-                                              onClick={e => { e.stopPropagation(); navigate(`/students/${r.student_id}`) }}
-                                              className="bg-red-50 text-red-600 border border-red-200 rounded-full px-2.5 py-0.5 hover:bg-red-100 cursor-pointer transition-colors"
-                                            >
-                                              {s ? `${s.last_name} ${s.first_name}` : `#${r.student_id}`}
-                                            </button>
-                                            {r.comment && (
-                                              <span className="text-slate-400 italic">Причина: {r.comment}</span>
-                                            )}
-                                          </div>
-                                        )
-                                      })}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+                                  </Box>
+                                </Box>
+                              )}
+                              {row.records.filter(r => !r.is_present).length > 0 && (
+                                <Box>
+                                  <Typography variant="caption" color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600, display: 'block', mb: 1 }}>
+                                    Отсутствовали ({row.records.filter(r => !r.is_present).length})
+                                  </Typography>
+                                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                                    {row.records.filter(r => !r.is_present).map(r => {
+                                      const s = studentMap[r.student_id]
+                                      return (
+                                        <Box key={r.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                          <Chip
+                                            label={s ? `${s.last_name} ${s.first_name}` : `#${r.student_id}`}
+                                            size="small"
+                                            onClick={e => { e.stopPropagation(); navigate(`/students/${r.student_id}`) }}
+                                            sx={{ bgcolor: '#F4D0CC', color: '#D05050', cursor: 'pointer' }}
+                                          />
+                                          {r.comment && <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>Причина: {r.comment}</Typography>}
+                                        </Box>
+                                      )
+                                    })}
+                                  </Box>
+                                </Box>
+                              )}
+                            </Box>
+                          </Collapse>
+                        </TableCell>
+                      </TableRow>
+                    </>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </Paper>
+        )
       )}
-    </div>
+    </Box>
   )
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div>
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className="text-xl font-bold text-slate-800 mt-0.5">{value}</p>
-    </div>
-  )
-}
-function Chevron() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  )
-}
-function Spinner() {
-  return (
-    <div className="p-8 flex items-center gap-3 text-slate-400">
-      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      Загрузка...
-    </div>
-  )
-}
-function Empty({ text }: { text: string }) {
-  return <div className="bg-white rounded-xl border border-slate-100 p-10 text-center text-slate-400 shadow-sm">{text}</div>
-}
+const Spin = () => <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress /></Box>
+const Empty = ({ text }: { text: string }) => (
+  <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">{text}</Typography></Paper>
+)

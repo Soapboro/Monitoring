@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react'
+import {
+  Box, Paper, Typography, TextField, Chip, CircularProgress,
+  Table, TableHead, TableBody, TableRow, TableCell, InputAdornment,
+} from '@mui/material'
+import { SearchRounded } from '@mui/icons-material'
 import { getMyGrades } from '../../api/resources'
 import type { GradeOut } from '../../api/resources'
 import { useSort } from '../../hooks/useSort'
@@ -20,68 +25,72 @@ export default function MyGradesPage() {
   const filtered = grades.filter(g =>
     `${g.date_recorded} ${GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}`.toLowerCase().includes(search.toLowerCase())
   )
-
   const { sorted, sortKey, sortDir, toggleSort } = useSort(filtered, (g, key) => {
-    if (key === 'date') return g.date_recorded
-    if (key === 'type') return GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type
-    if (key === 'value') return g.value ?? -1
+    if (key === 'date')   return g.date_recorded
+    if (key === 'type')   return GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type
+    if (key === 'value')  return g.value ?? -1
     if (key === 'passed') return g.passed === true ? 1 : g.passed === false ? 0 : -1
     return ''
   })
 
-  if (loading) return <Spinner />
+  if (loading) return <Spin />
 
   return (
-    <div className="p-8 max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-800 mb-1">Мои оценки</h1>
-          <p className="text-slate-400 text-sm">Всего: {grades.length}</p>
-        </div>
-        <input type="text" placeholder="Поиск по дате или типу..."
+    <Box sx={{ p: 4, maxWidth: 700 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 3 }}>
+        <Box>
+          <Typography variant="h5" fontWeight={700}>Мои оценки</Typography>
+          <Typography variant="body2" color="text.secondary">Всего: {grades.length}</Typography>
+        </Box>
+        <TextField
+          size="small" placeholder="Поиск по дате или типу..."
           value={search} onChange={e => setSearch(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 w-56 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </div>
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+          sx={{ width: 240 }}
+        />
+      </Box>
 
       {sorted.length === 0 ? <Empty text="Ничего не найдено" /> : (
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <SortableHeader label="Дата" sortKey="date" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="px-6" />
-                <SortableHeader label="Тип" sortKey="type" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                <SortableHeader label="Оценка" sortKey="value" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
-                <SortableHeader label="Зачёт" sortKey="passed" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="px-6" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
+        <Paper elevation={2}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <SortableHeader label="Дата"   sortKey="date"   currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Тип"    sortKey="type"   currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Оценка" sortKey="value"  currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+                <SortableHeader label="Зачёт"  sortKey="passed" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {sorted.map(g => (
-                <tr key={g.id} className="hover:bg-slate-50">
-                  <td className="px-6 py-3 text-slate-500">{String(g.date_recorded).slice(0, 10)}</td>
-                  <td className="px-4 py-3 text-slate-600">{GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}</td>
-                  <td className="px-4 py-3 text-right">
+                <TableRow key={g.id} hover>
+                  <TableCell sx={{ color: 'text.secondary' }}>{String(g.date_recorded).slice(0, 10)}</TableCell>
+                  <TableCell sx={{ color: 'text.secondary' }}>{GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}</TableCell>
+                  <TableCell align="right">
                     {g.value !== null ? (
-                      <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${g.value >= 4 ? 'bg-emerald-100 text-emerald-700' : g.value >= 3 ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>{g.value}</span>
-                    ) : <span className="text-slate-400">—</span>}
-                  </td>
-                  <td className="px-6 py-3 text-right">
-                    {g.passed === true && <span className="text-emerald-600 text-xs font-medium">Сдано</span>}
-                    {g.passed === false && <span className="text-red-500 text-xs font-medium">Не сдано</span>}
-                    {g.passed === null && <span className="text-slate-400 text-xs">—</span>}
-                  </td>
-                </tr>
+                      <Chip label={g.value} size="small" sx={
+                        g.value >= 4 ? { bgcolor: '#D4EDDF', color: '#347856' } :
+                        g.value >= 3 ? { bgcolor: '#DBEAFE', color: '#1D4ED8' } :
+                                       { bgcolor: '#F4D0CC', color: '#D05050' }
+                      } />
+                    ) : <Typography variant="body2" color="text.disabled">—</Typography>}
+                  </TableCell>
+                  <TableCell align="right">
+                    {g.passed === true  && <Typography variant="caption" sx={{ color: '#347856', fontWeight: 600 }}>Сдано</Typography>}
+                    {g.passed === false && <Typography variant="caption" sx={{ color: '#D05050', fontWeight: 600 }}>Не сдано</Typography>}
+                    {g.passed === null  && <Typography variant="body2" color="text.disabled">—</Typography>}
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Paper>
       )}
-    </div>
+    </Box>
   )
 }
 
-function Spinner() {
-  return <div className="p-8 flex items-center gap-3 text-slate-400"><div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />Загрузка...</div>
-}
-function Empty({ text }: { text: string }) {
-  return <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 shadow-sm">{text}</div>
-}
+const Spin  = () => <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress color="primary" /></Box>
+const Empty = ({ text }: { text: string }) => (
+  <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">{text}</Typography></Paper>
+)

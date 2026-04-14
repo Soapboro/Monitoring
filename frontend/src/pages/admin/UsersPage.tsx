@@ -1,34 +1,39 @@
 import { useEffect, useState } from 'react'
+import {
+  Box, Paper, Typography, TextField, Button, Alert, Chip,
+  Table, TableHead, TableBody, TableRow, TableCell,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Stack, MenuItem, IconButton, InputAdornment, CircularProgress,
+} from '@mui/material'
+import { SearchRounded, EditRounded, DeleteRounded, AddRounded } from '@mui/icons-material'
 import client from '../../api/client'
 import { createUser, updateUser, deleteUser } from '../../api/resources'
 import type { UserMe } from '../../api/auth'
-import { Overlay, Field, ConfirmDelete, PencilIcon, TrashIcon } from '../../components/CrudHelpers'
+import { ConfirmDelete } from '../../components/CrudHelpers'
 import { useSort } from '../../hooks/useSort'
 import SortableHeader from '../../components/SortableHeader'
 
 const ROLE_LABELS: Record<string, string> = { admin: 'Администратор', teacher: 'Преподаватель', student: 'Студент' }
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<UserMe[]>([])
+  const [users, setUsers]   = useState<UserMe[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState<{ mode: 'create' | 'edit'; user?: UserMe } | null>(null)
+  const [modal, setModal]   = useState<{ mode: 'create' | 'edit'; user?: UserMe } | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
   const load = () => {
     setLoading(true)
     client.get<UserMe[]>('/users').then(r => setUsers(r.data)).finally(() => setLoading(false))
   }
-
   useEffect(() => { load() }, [])
 
   const filtered = users.filter(u =>
     `${u.email} ${ROLE_LABELS[u.role]}`.toLowerCase().includes(search.toLowerCase())
   )
-
   const { sorted, sortKey, sortDir, toggleSort } = useSort(filtered, (u, key) => {
-    if (key === 'email') return u.email
-    if (key === 'role') return ROLE_LABELS[u.role]
+    if (key === 'email')  return u.email
+    if (key === 'role')   return ROLE_LABELS[u.role]
     if (key === 'status') return u.is_active
     return ''
   })
@@ -40,77 +45,92 @@ export default function UsersPage() {
     load()
   }
 
-  if (loading) return <Spinner />
+  if (loading) return <Spin />
 
   return (
-    <div className="p-8 max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-800 mb-1">Пользователи</h1>
-          <p className="text-slate-400 text-sm">Всего: {users.length}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <input type="text" placeholder="Поиск по email или роли..."
+    <Box sx={{ p: 4, maxWidth: 900 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 3 }}>
+        <Box>
+          <Typography variant="h5" fontWeight={700}>Пользователи</Typography>
+          <Typography variant="body2" color="text.secondary">Всего: {users.length}</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
+          <TextField
+            size="small" placeholder="Поиск по email или роли..."
             value={search} onChange={e => setSearch(e.target.value)}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-2 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <button onClick={() => setModal({ mode: 'create' })}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">
-            + Создать
-          </button>
-        </div>
-      </div>
+            InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+            sx={{ width: 280 }}
+          />
+          <Button variant="contained" startIcon={<AddRounded />} onClick={() => setModal({ mode: 'create' })}>
+            Создать
+          </Button>
+        </Box>
+      </Box>
 
       {sorted.length === 0 ? <Empty text="Ничего не найдено" /> : (
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <SortableHeader label="Email" sortKey="email" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="px-6" />
-                <SortableHeader label="Роль" sortKey="role" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+        <Paper elevation={2}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <SortableHeader label="Email"  sortKey="email"  currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Роль"   sortKey="role"   currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 <SortableHeader label="Статус" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                <th className="px-6 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {sorted.map(u => (
-                <tr key={u.id} className="hover:bg-slate-50">
-                  <td className="px-6 py-3 text-slate-800">{u.email}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : u.role === 'teacher' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
-                      {ROLE_LABELS[u.role]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {u.is_active
-                      ? <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Активен</span>
-                      : <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">Отключён</span>}
-                  </td>
-                  <td className="px-6 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => setModal({ mode: 'edit', user: u })} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Редактировать"><PencilIcon /></button>
-                      <button onClick={() => setDeleteId(u.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить"><TrashIcon /></button>
-                    </div>
-                  </td>
-                </tr>
+                <TableRow key={u.id} hover>
+                  <TableCell>{u.email}</TableCell>
+                  <TableCell>
+                    <Chip label={ROLE_LABELS[u.role]} size="small" sx={
+                      u.role === 'admin'   ? { bgcolor: '#EDE9FE', color: '#5B21B6' } :
+                      u.role === 'teacher' ? { bgcolor: '#DBEAFE', color: '#1D4ED8' } :
+                                            { bgcolor: '#F5EDEA', color: '#5A3826' }
+                    } />
+                  </TableCell>
+                  <TableCell>
+                    <Chip label={u.is_active ? 'Активен' : 'Отключён'} size="small"
+                      sx={u.is_active ? { bgcolor: '#D4EDDF', color: '#347856' } : { bgcolor: '#F4D0CC', color: '#D05050' }} />
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton size="small" onClick={() => setModal({ mode: 'edit', user: u })}
+                      sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main' } }}>
+                      <EditRounded fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => setDeleteId(u.id)}
+                      sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+                      <DeleteRounded fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Paper>
       )}
 
-      {modal && <UserModal mode={modal.mode} user={modal.user} onClose={() => setModal(null)} onSave={() => { setModal(null); load() }} />}
-      {deleteId !== null && <ConfirmDelete text="Удалить пользователя? Это действие необратимо." onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />}
-    </div>
+      {modal && (
+        <UserModal mode={modal.mode} user={modal.user}
+          onClose={() => setModal(null)} onSave={() => { setModal(null); load() }} />
+      )}
+      {deleteId !== null && (
+        <ConfirmDelete text="Удалить пользователя? Это действие необратимо."
+          onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
+      )}
+    </Box>
   )
 }
 
-function UserModal({ mode, user, onClose, onSave }: { mode: 'create' | 'edit'; user?: UserMe; onClose: () => void; onSave: () => void }) {
-  const [email, setEmail] = useState(user?.email ?? '')
+function UserModal({ mode, user, onClose, onSave }: {
+  mode: 'create' | 'edit'; user?: UserMe; onClose: () => void; onSave: () => void
+}) {
+  const [email, setEmail]     = useState(user?.email ?? '')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState(user?.role ?? 'student')
+  const [role, setRole]       = useState(user?.role ?? 'student')
   const [isActive, setIsActive] = useState(user?.is_active ?? true)
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [error, setError]     = useState('')
+  const [saving, setSaving]   = useState(false)
 
   const submit = async () => {
     if (!email) { setError('Email обязателен'); return }
@@ -124,34 +144,45 @@ function UserModal({ mode, user, onClose, onSave }: { mode: 'create' | 'edit'; u
   }
 
   return (
-    <Overlay onClose={onClose}>
-      <h2 className="text-lg font-semibold text-slate-800 mb-5">{mode === 'create' ? 'Новый пользователь' : 'Редактировать пользователя'}</h2>
-      <Field label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></Field>
-      {mode === 'create' && <Field label="Пароль"><input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></Field>}
-      <Field label="Роль">
-        <select value={role} onChange={e => setRole(e.target.value as UserMe['role'])} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="admin">Администратор</option><option value="teacher">Преподаватель</option><option value="student">Студент</option>
-        </select>
-      </Field>
-      {mode === 'edit' && (
-        <Field label="Статус">
-          <select value={isActive ? 'true' : 'false'} onChange={e => setIsActive(e.target.value === 'true')} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="true">Активен</option><option value="false">Отключён</option>
-          </select>
-        </Field>
-      )}
-      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-      <div className="flex justify-end gap-3 mt-2">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">Отмена</button>
-        <button onClick={submit} disabled={saving} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">{saving ? 'Сохранение...' : 'Сохранить'}</button>
-      </div>
-    </Overlay>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{mode === 'create' ? 'Новый пользователь' : 'Редактировать пользователя'}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <TextField label="Email" type="email" size="small" fullWidth value={email} onChange={e => setEmail(e.target.value)} />
+          {mode === 'create' && (
+            <TextField label="Пароль" type="password" size="small" fullWidth value={password} onChange={e => setPassword(e.target.value)} />
+          )}
+          <TextField select label="Роль" size="small" fullWidth value={role} onChange={e => setRole(e.target.value as UserMe['role'])}>
+            <MenuItem value="admin">Администратор</MenuItem>
+            <MenuItem value="teacher">Преподаватель</MenuItem>
+            <MenuItem value="student">Студент</MenuItem>
+          </TextField>
+          {mode === 'edit' && (
+            <TextField select label="Статус" size="small" fullWidth value={isActive ? 'true' : 'false'} onChange={e => setIsActive(e.target.value === 'true')}>
+              <MenuItem value="true">Активен</MenuItem>
+              <MenuItem value="false">Отключён</MenuItem>
+            </TextField>
+          )}
+          {error && <Alert severity="error" sx={{ py: 0.5 }}>{error}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} variant="outlined">Отмена</Button>
+        <Button onClick={submit} variant="contained" disabled={saving}>
+          {saving ? 'Сохранение...' : 'Сохранить'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
-function Spinner() {
-  return <div className="p-8 flex items-center gap-3 text-slate-400"><div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />Загрузка...</div>
-}
-function Empty({ text }: { text: string }) {
-  return <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 shadow-sm">{text}</div>
-}
+const Spin = () => (
+  <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}>
+    <CircularProgress color="primary" />
+  </Box>
+)
+const Empty = ({ text }: { text: string }) => (
+  <Paper sx={{ p: 6, textAlign: 'center' }}>
+    <Typography color="text.secondary">{text}</Typography>
+  </Paper>
+)

@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  Box, Paper, Typography, TextField, Chip, Avatar,
+  Table, TableHead, TableBody, TableRow, TableCell,
+  InputAdornment, CircularProgress, Link as MuiLink,
+} from '@mui/material'
+import { SearchRounded } from '@mui/icons-material'
 import { getStudents, getGroups } from '../../api/resources'
 import type { StudentProfile } from '../../api/resources'
 import { useSort } from '../../hooks/useSort'
 import SortableHeader from '../../components/SortableHeader'
+import { PEACH, WARM } from '../../theme'
 
 export default function StudentsPage() {
   const navigate = useNavigate()
@@ -27,80 +34,83 @@ export default function StudentsPage() {
   })
 
   const { sorted, sortKey, sortDir, toggleSort } = useSort(filtered, (s, key) => {
-    if (key === 'name') return `${s.last_name} ${s.first_name}`
+    if (key === 'name')        return `${s.last_name} ${s.first_name}`
     if (key === 'student_num') return s.student_num ?? ''
-    if (key === 'group') return groupNames[s.group_id] ?? ''
-    if (key === 'status') return s.is_active
+    if (key === 'group')       return groupNames[s.group_id] ?? ''
+    if (key === 'status')      return s.is_active
     return ''
   })
 
-  if (loading) return <Spinner />
+  if (loading) return <Spin />
 
   return (
-    <div className="p-8 max-w-5xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-800 mb-1">Студенты</h1>
-          <p className="text-slate-400 text-sm">Всего: {students.length}</p>
-        </div>
-        <input
-          type="text"
-          placeholder="Поиск по ФИО или номеру..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    <Box sx={{ p: 4, maxWidth: 1000 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 3 }}>
+        <Box>
+          <Typography variant="h5" fontWeight={700}>Студенты</Typography>
+          <Typography variant="body2" color="text.secondary">Всего: {students.length}</Typography>
+        </Box>
+        <TextField
+          size="small" placeholder="Поиск по ФИО или номеру..."
+          value={search} onChange={e => setSearch(e.target.value)}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+          sx={{ width: 280 }}
         />
-      </div>
+      </Box>
 
       {sorted.length === 0 ? <Empty text="Ничего не найдено" /> : (
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <SortableHeader label="ФИО" sortKey="name" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="px-6" />
+        <Paper elevation={2}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <SortableHeader label="ФИО"     sortKey="name"        currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 <SortableHeader label="№ студ." sortKey="student_num" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                <SortableHeader label="Группа" sortKey="group" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                <SortableHeader label="Статус" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" className="px-6" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
+                <SortableHeader label="Группа"  sortKey="group"       currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Статус"  sortKey="status"      currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {sorted.map(s => (
-                <tr
-                  key={s.id}
-                  onClick={() => navigate(`/students/${s.id}`)}
-                  className="hover:bg-blue-50 cursor-pointer transition-colors"
-                >
-                  <td className="px-6 py-3 text-slate-800 font-medium flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-                      <span className="text-xs font-semibold text-blue-600">{s.last_name[0]}</span>
-                    </div>
-                    {s.last_name} {s.first_name} {s.middle_name ?? ''}
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{s.student_num ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-500">
-                    <button onClick={e => { e.stopPropagation(); navigate(`/groups/${s.group_id}`) }}
-                      className="text-blue-600 hover:underline cursor-pointer">
+                <TableRow key={s.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/students/${s.id}`)}>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Avatar sx={{ width: 28, height: 28, fontSize: 12, fontWeight: 700, bgcolor: PEACH[100], color: PEACH[700] }}>
+                        {s.last_name[0]}
+                      </Avatar>
+                      <Typography variant="body2" fontWeight={500} color={WARM[800]}>
+                        {s.last_name} {s.first_name} {s.middle_name ?? ''}
+                      </Typography>
+                    </Box>
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary' }}>{s.student_num ?? '—'}</TableCell>
+                  <TableCell>
+                    <MuiLink
+                      component="button"
+                      underline="hover"
+                      color="primary"
+                      variant="body2"
+                      onClick={e => { e.stopPropagation(); navigate(`/groups/${s.group_id}`) }}
+                    >
                       {groupNames[s.group_id] ?? `#${s.group_id}`}
-                    </button>
-                  </td>
-                  <td className="px-6 py-3 text-right">
-                    {s.is_active
-                      ? <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Активен</span>
-                      : <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">Неактивен</span>}
-                  </td>
-                </tr>
+                    </MuiLink>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Chip label={s.is_active ? 'Активен' : 'Неактивен'} size="small"
+                      sx={s.is_active ? { bgcolor: '#D4EDDF', color: '#347856' } : { bgcolor: '#F5EDEA', color: WARM[500] }} />
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Paper>
       )}
-    </div>
+    </Box>
   )
 }
 
-function Spinner() {
-  return <div className="p-8 flex items-center gap-3 text-slate-400"><div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />Загрузка...</div>
-}
-function Empty({ text }: { text: string }) {
-  return <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 shadow-sm">{text}</div>
-}
+const Spin = () => (
+  <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress color="primary" /></Box>
+)
+const Empty = ({ text }: { text: string }) => (
+  <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">{text}</Typography></Paper>
+)

@@ -1,18 +1,25 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  Box, Paper, Typography, TextField, Button, Alert, Chip,
+  Table, TableHead, TableBody, TableRow, TableCell,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Stack, MenuItem, IconButton, InputAdornment, CircularProgress,
+} from '@mui/material'
+import { SearchRounded, EditRounded, DeleteRounded, AddRounded, ChevronRightRounded } from '@mui/icons-material'
 import type { Group, Department } from '../../api/resources'
 import { getGroups, getDepartments, createGroup, updateGroup, deleteGroup } from '../../api/resources'
-import { Overlay, Field, ConfirmDelete, PencilIcon, TrashIcon } from '../../components/CrudHelpers'
+import { ConfirmDelete } from '../../components/CrudHelpers'
 import { useSort } from '../../hooks/useSort'
 import SortableHeader from '../../components/SortableHeader'
 
 export default function GroupsPage() {
   const navigate = useNavigate()
-  const [groups, setGroups] = useState<Group[]>([])
+  const [groups, setGroups]           = useState<Group[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
-  const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState<{ mode: 'create' | 'edit'; group?: Group } | null>(null)
+  const [search, setSearch]           = useState('')
+  const [loading, setLoading]         = useState(true)
+  const [modal, setModal]   = useState<{ mode: 'create' | 'edit'; group?: Group } | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
 
   const load = () => {
@@ -21,17 +28,13 @@ export default function GroupsPage() {
       .then(([g, d]) => { setGroups(g); setDepartments(d) })
       .finally(() => setLoading(false))
   }
-
   useEffect(() => { load() }, [])
 
-  const filtered = groups.filter(g =>
-    g.name.toLowerCase().includes(search.toLowerCase())
-  )
-
+  const filtered = groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase()))
   const { sorted, sortKey, sortDir, toggleSort } = useSort(filtered, (g, key) => {
-    if (key === 'name') return g.name
+    if (key === 'name')       return g.name
     if (key === 'year_start') return g.year_start
-    if (key === 'status') return g.is_active
+    if (key === 'status')     return g.is_active
     return ''
   })
 
@@ -42,71 +45,68 @@ export default function GroupsPage() {
     load()
   }
 
-  if (loading) return <Spinner />
+  if (loading) return <Spin />
 
   return (
-    <div className="p-8 max-w-3xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-800 mb-1">Учебные группы</h1>
-          <p className="text-slate-400 text-sm">Всего: {groups.length} · Нажмите на группу для просмотра списка</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <input type="text" placeholder="Поиск по названию..."
+    <Box sx={{ p: 4, maxWidth: 800 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 3 }}>
+        <Box>
+          <Typography variant="h5" fontWeight={700}>Учебные группы</Typography>
+          <Typography variant="body2" color="text.secondary">Всего: {groups.length} · Нажмите для просмотра</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
+          <TextField
+            size="small" placeholder="Поиск по названию..."
             value={search} onChange={e => setSearch(e.target.value)}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-2 w-48 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <button onClick={() => setModal({ mode: 'create' })}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">
-            + Создать
-          </button>
-        </div>
-      </div>
+            InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+            sx={{ width: 220 }}
+          />
+          <Button variant="contained" startIcon={<AddRounded />} onClick={() => setModal({ mode: 'create' })}>
+            Создать
+          </Button>
+        </Box>
+      </Box>
 
       {sorted.length === 0 ? <Empty text="Ничего не найдено" /> : (
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <SortableHeader label="Название" sortKey="name" currentKey={sortKey} dir={sortDir} onSort={toggleSort} className="px-6" />
+        <Paper elevation={2}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <SortableHeader label="Название"   sortKey="name"       currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 <SortableHeader label="Год начала" sortKey="year_start" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                <SortableHeader label="Статус" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                <th className="px-6 py-3" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
+                <SortableHeader label="Статус"     sortKey="status"     currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <TableCell />
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {sorted.map(g => (
-                <tr key={g.id} className="hover:bg-blue-50 transition-colors">
-                  <td className="px-6 py-3 cursor-pointer" onClick={() => navigate(`/groups/${g.id}`)}>
-                    <span className="font-medium text-slate-800 flex items-center gap-2">
-                      {g.name}
-                      <svg className="w-3.5 h-3.5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500 cursor-pointer" onClick={() => navigate(`/groups/${g.id}`)}>{g.year_start}</td>
-                  <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/groups/${g.id}`)}>
-                    {g.is_active
-                      ? <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Активна</span>
-                      : <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">Неактивна</span>}
-                  </td>
-                  <td className="px-6 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => setModal({ mode: 'edit', group: g })}
-                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-100 rounded transition-colors" title="Редактировать">
-                        <PencilIcon />
-                      </button>
-                      <button onClick={() => setDeleteId(g.id)}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Удалить">
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                <TableRow key={g.id} hover>
+                  <TableCell sx={{ cursor: 'pointer' }} onClick={() => navigate(`/groups/${g.id}`)}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="body2" fontWeight={500}>{g.name}</Typography>
+                      <ChevronRightRounded sx={{ fontSize: 16, color: 'text.disabled' }} />
+                    </Box>
+                  </TableCell>
+                  <TableCell sx={{ color: 'text.secondary', cursor: 'pointer' }} onClick={() => navigate(`/groups/${g.id}`)}>{g.year_start}</TableCell>
+                  <TableCell sx={{ cursor: 'pointer' }} onClick={() => navigate(`/groups/${g.id}`)}>
+                    <Chip label={g.is_active ? 'Активна' : 'Неактивна'} size="small"
+                      sx={g.is_active ? { bgcolor: '#D4EDDF', color: '#347856' } : { bgcolor: '#F5EDEA', color: '#9A6E62' }} />
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton size="small" onClick={() => setModal({ mode: 'edit', group: g })}
+                      sx={{ color: 'text.disabled', '&:hover': { color: 'primary.main' } }}>
+                      <EditRounded fontSize="small" />
+                    </IconButton>
+                    <IconButton size="small" onClick={() => setDeleteId(g.id)}
+                      sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+                      <DeleteRounded fontSize="small" />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Paper>
       )}
 
       {modal && (
@@ -117,23 +117,22 @@ export default function GroupsPage() {
         <ConfirmDelete text="Удалить группу? Это действие необратимо."
           onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
       )}
-    </div>
+    </Box>
   )
 }
 
 function GroupModal({ mode, group, departments, onClose, onSave }: {
   mode: 'create' | 'edit'; group?: Group; departments: Department[]; onClose: () => void; onSave: () => void
 }) {
-  const [name, setName] = useState(group?.name ?? '')
+  const [name, setName]           = useState(group?.name ?? '')
   const [yearStart, setYearStart] = useState(group?.year_start?.toString() ?? new Date().getFullYear().toString())
-  const [departmentId, setDepartmentId] = useState(group?.department_id?.toString() ?? '')
-  const [isActive, setIsActive] = useState(group?.is_active ?? true)
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [departmentId, setDeptId] = useState(group?.department_id?.toString() ?? '')
+  const [isActive, setIsActive]   = useState(group?.is_active ?? true)
+  const [error, setError]         = useState('')
+  const [saving, setSaving]       = useState(false)
 
   const submit = async () => {
     if (!name.trim()) { setError('Название обязательно'); return }
-    if (!yearStart || isNaN(parseInt(yearStart))) { setError('Укажите год начала'); return }
     setSaving(true); setError('')
     try {
       const payload = { name: name.trim(), year_start: parseInt(yearStart), department_id: departmentId ? parseInt(departmentId) : undefined, is_active: isActive }
@@ -144,33 +143,39 @@ function GroupModal({ mode, group, departments, onClose, onSave }: {
   }
 
   return (
-    <Overlay onClose={onClose}>
-      <h2 className="text-lg font-semibold text-slate-800 mb-5">{mode === 'create' ? 'Новая группа' : 'Редактировать группу'}</h2>
-      <Field label="Название"><input value={name} onChange={e => setName(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></Field>
-      <Field label="Год начала обучения"><input type="number" min="2000" max="2100" value={yearStart} onChange={e => setYearStart(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" /></Field>
-      <Field label="Кафедра (необязательно)">
-        <select value={departmentId} onChange={e => setDepartmentId(e.target.value)} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="">— не указана —</option>
-          {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-      </Field>
-      <Field label="Статус">
-        <select value={isActive ? 'true' : 'false'} onChange={e => setIsActive(e.target.value === 'true')} className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          <option value="true">Активна</option><option value="false">Неактивна</option>
-        </select>
-      </Field>
-      {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-      <div className="flex justify-end gap-3 mt-2">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">Отмена</button>
-        <button onClick={submit} disabled={saving} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">{saving ? 'Сохранение...' : 'Сохранить'}</button>
-      </div>
-    </Overlay>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{mode === 'create' ? 'Новая группа' : 'Редактировать группу'}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ pt: 1 }}>
+          <TextField label="Название" size="small" fullWidth value={name} onChange={e => setName(e.target.value)} />
+          <TextField label="Год начала" type="number" size="small" fullWidth value={yearStart}
+            onChange={e => setYearStart(e.target.value)} inputProps={{ min: 2000, max: 2100 }} />
+          <TextField select label="Кафедра (необязательно)" size="small" fullWidth value={departmentId}
+            onChange={e => setDeptId(e.target.value)}>
+            <MenuItem value="">— не указана —</MenuItem>
+            {departments.map(d => <MenuItem key={d.id} value={d.id}>{d.name}</MenuItem>)}
+          </TextField>
+          <TextField select label="Статус" size="small" fullWidth value={isActive ? 'true' : 'false'}
+            onChange={e => setIsActive(e.target.value === 'true')}>
+            <MenuItem value="true">Активна</MenuItem>
+            <MenuItem value="false">Неактивна</MenuItem>
+          </TextField>
+          {error && <Alert severity="error" sx={{ py: 0.5 }}>{error}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2.5 }}>
+        <Button onClick={onClose} variant="outlined">Отмена</Button>
+        <Button onClick={submit} variant="contained" disabled={saving}>
+          {saving ? 'Сохранение...' : 'Сохранить'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
-function Spinner() {
-  return <div className="p-8 flex items-center gap-3 text-slate-400"><div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />Загрузка...</div>
-}
-function Empty({ text }: { text: string }) {
-  return <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 shadow-sm">{text}</div>
-}
+const Spin = () => (
+  <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress color="primary" /></Box>
+)
+const Empty = ({ text }: { text: string }) => (
+  <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">{text}</Typography></Paper>
+)

@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  Box, Paper, Typography, Chip, CircularProgress,
+  Table, TableHead, TableBody, TableRow, TableCell, LinearProgress,
+} from '@mui/material'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { getMyTeacherProfile, getAssignments } from '../../api/resources'
 import { getGroupSummary, getTopStudents } from '../../api/analytics'
 import type { GroupSummaryRow, TopStudent } from '../../api/analytics'
 import client from '../../api/client'
 
-// Объединяем строки по предмету: взвешенный avg, min/max, суммируем counts
 function mergeSummaries(all: GroupSummaryRow[]): GroupSummaryRow[] {
   const bySubject = new Map<string, GroupSummaryRow[]>()
   for (const row of all) {
@@ -20,11 +23,8 @@ function mergeSummaries(all: GroupSummaryRow[]): GroupSummaryRow[] {
       ? rows.reduce((s, r) => s + r.avg_grade * r.students_count, 0) / totalStudents
       : 0
     return {
-      subject,
-      acad_year: rows[0].acad_year,
-      semester: rows[0].semester,
-      students_count: totalStudents,
-      avg_grade: weightedAvg,
+      subject, acad_year: rows[0].acad_year, semester: rows[0].semester,
+      students_count: totalStudents, avg_grade: weightedAvg,
       min_grade: Math.min(...rows.map(r => r.min_grade)),
       max_grade: Math.max(...rows.map(r => r.max_grade)),
       tests_total: rows.reduce((s, r) => s + r.tests_total, 0),
@@ -33,7 +33,6 @@ function mergeSummaries(all: GroupSummaryRow[]): GroupSummaryRow[] {
   }).sort((a, b) => a.subject.localeCompare(b.subject))
 }
 
-// Студентов из разных групп объединяем, дубли по id — берём лучший avg
 function mergeStudents(all: TopStudent[]): TopStudent[] {
   const byId = new Map<number, TopStudent>()
   for (const s of all) {
@@ -42,6 +41,11 @@ function mergeStudents(all: TopStudent[]): TopStudent[] {
   }
   return Array.from(byId.values()).sort((a, b) => b.avg_grade - a.avg_grade)
 }
+
+const gradeChip = (avg: number) =>
+  avg >= 4.5 ? { bgcolor: '#D4EDDF', color: '#347856' } :
+  avg >= 3.5 ? { bgcolor: '#DBEAFE', color: '#1D4ED8' } :
+               { bgcolor: '#F5E2CE', color: '#C9874A' }
 
 export default function AnalyticsPage() {
   const navigate = useNavigate()
@@ -64,23 +68,19 @@ export default function AnalyticsPage() {
         const nameMap: Record<number, string> = {}
         for (const g of groups) nameMap[g.id] = g.name
         setGroupNames(nameMap)
-
         if (ids.length === 0) return
-
         const [allSummaries, allStudents] = await Promise.all([
           Promise.all(ids.map(id => getGroupSummary(id))).then(results => results.flat()),
           Promise.all(ids.map(id => getTopStudents(id))).then(results => results.flat()),
         ])
         setGradeSummary(mergeSummaries(allSummaries))
         setTopStudents(mergeStudents(allStudents))
-      } finally {
-        setLoading(false)
-      }
+      } finally { setLoading(false) }
     }
     init()
   }, [])
 
-  if (loading) return <Spinner />
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
 
   const chartData = gradeSummary.map(r => ({
     name: r.subject.length > 16 ? r.subject.slice(0, 14) + '…' : r.subject,
@@ -93,157 +93,131 @@ export default function AnalyticsPage() {
     testsPassed: r.tests_passed,
   }))
 
-  const groupLabel = groupIds.length > 0
-    ? groupIds.map(id => groupNames[id] ?? `Группа ${id}`).join(', ')
-    : ''
+  const groupLabel = groupIds.length > 0 ? groupIds.map(id => groupNames[id] ?? `Группа ${id}`).join(', ') : ''
 
   return (
-    <div className="p-8 max-w-5xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-800 mb-1">Аналитика</h1>
-        {groupLabel && (
-          <p className="text-slate-400 text-sm">{groupLabel}</p>
-        )}
-      </div>
+    <Box sx={{ p: 4, maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <Box>
+        <Typography variant="h5" fontWeight={700}>Аналитика</Typography>
+        {groupLabel && <Typography variant="body2" color="text.secondary">{groupLabel}</Typography>}
+      </Box>
 
       {groupIds.length === 0 ? (
-        <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 shadow-sm">
-          Нет назначенных групп
-        </div>
+        <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">Нет назначенных групп</Typography></Paper>
       ) : (
         <>
           {chartData.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm">
-              <h2 className="text-base font-semibold text-slate-700 mb-1">Средний балл по дисциплинам</h2>
-              <p className="text-xs text-slate-400 mb-5">{groupLabel}</p>
+            <Paper elevation={1} sx={{ p: 3 }}>
+              <Typography variant="subtitle1" fontWeight={600}>Средний балл по дисциплинам</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>{groupLabel}</Typography>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={chartData} margin={{ top: 0, right: 16, left: -10, bottom: 60 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} angle={-35} textAnchor="end" interval={0} />
                   <YAxis domain={[0, 5]} tick={{ fontSize: 11, fill: '#64748b' }} />
                   <Tooltip
-                    formatter={(v: number, key: string) => [
-                      v.toFixed(2),
-                      key === 'avg' ? 'Средний' : key === 'min' ? 'Мин' : 'Макс'
-                    ]}
+                    formatter={(v: number, key: string) => [v.toFixed(2), key === 'avg' ? 'Средний' : key === 'min' ? 'Мин' : 'Макс']}
                     labelFormatter={(_, payload) => {
                       const p = payload?.[0]?.payload
                       if (!p) return ''
-                      const tests = p.testsTotal > 0
-                        ? ` · тесты: ${p.testsPassed}/${p.testsTotal}`
-                        : ''
+                      const tests = p.testsTotal > 0 ? ` · тесты: ${p.testsPassed}/${p.testsTotal}` : ''
                       return `${p.fullName}${tests}`
                     }}
                     contentStyle={{ borderRadius: 8, fontSize: 12 }}
                   />
-                  <Bar dataKey="avg" fill="#3b82f6" radius={[4, 4, 0, 0]} name="avg" />
+                  <Bar dataKey="avg" fill="#C9874A" radius={[4, 4, 0, 0]} name="avg" />
                   <Bar dataKey="min" fill="#e2e8f0" radius={[4, 4, 0, 0]} name="min" />
-                  <Bar dataKey="max" fill="#10b981" radius={[4, 4, 0, 0]} name="max" />
+                  <Bar dataKey="max" fill="#347856" radius={[4, 4, 0, 0]} name="max" />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            </Paper>
           )}
 
           {gradeSummary.some(r => r.tests_total > 0) && (
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100">
-                <h2 className="text-base font-semibold text-slate-700">Тесты по дисциплинам</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{groupLabel}</p>
-              </div>
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="text-left px-6 py-3 text-slate-500 font-medium">Дисциплина</th>
-                    <th className="text-right px-6 py-3 text-slate-500 font-medium">Сдали / Выдано</th>
-                    <th className="text-right px-6 py-3 text-slate-500 font-medium">Прогресс</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
+            <Paper elevation={2} sx={{ overflow: 'hidden' }}>
+              <Box sx={{ px: 3, py: 2, borderBottom: 1, borderColor: 'divider' }}>
+                <Typography variant="subtitle1" fontWeight={600}>Тесты по дисциплинам</Typography>
+                <Typography variant="caption" color="text.secondary">{groupLabel}</Typography>
+              </Box>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Дисциплина</TableCell>
+                    <TableCell align="right">Сдали / Выдано</TableCell>
+                    <TableCell align="right">Прогресс</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {gradeSummary.filter(r => r.tests_total > 0).map(r => {
                     const pct = r.tests_total > 0 ? Math.round(r.tests_passed / r.tests_total * 100) : 0
                     return (
-                      <tr key={r.subject} className="hover:bg-slate-50">
-                        <td className="px-6 py-3 text-slate-800">{r.subject}</td>
-                        <td className="px-6 py-3 text-right">
-                          <span className={`font-semibold ${r.tests_passed >= r.tests_total ? 'text-emerald-600' : 'text-slate-700'}`}>
+                      <TableRow key={r.subject} hover>
+                        <TableCell>{r.subject}</TableCell>
+                        <TableCell align="right">
+                          <Typography component="span" fontWeight={600} sx={{ color: r.tests_passed >= r.tests_total ? '#347856' : 'text.primary' }}>
                             {r.tests_passed}
-                          </span>
-                          <span className="text-slate-400"> / {r.tests_total}</span>
-                        </td>
-                        <td className="px-6 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${pct >= 80 ? 'bg-emerald-400' : pct >= 50 ? 'bg-blue-400' : 'bg-amber-400'}`}
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                            <span className="text-xs text-slate-500 w-8 text-right">{pct}%</span>
-                          </div>
-                        </td>
-                      </tr>
+                          </Typography>
+                          <Typography component="span" color="text.disabled"> / {r.tests_total}</Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
+                            <LinearProgress
+                              variant="determinate"
+                              value={pct}
+                              sx={{
+                                width: 96, height: 6, borderRadius: 3,
+                                bgcolor: '#e2e8f0',
+                                '& .MuiLinearProgress-bar': {
+                                  bgcolor: pct >= 80 ? '#347856' : pct >= 50 ? '#1D4ED8' : '#C9874A',
+                                  borderRadius: 3,
+                                },
+                              }}
+                            />
+                            <Typography variant="caption" color="text.secondary" sx={{ minWidth: 36, textAlign: 'right' }}>{pct}%</Typography>
+                          </Box>
+                        </TableCell>
+                      </TableRow>
                     )
                   })}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Paper>
           )}
 
           {topStudents.length > 0 && (
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h2 className="text-base font-semibold text-slate-700">Рейтинг студентов</h2>
-                <span className="text-xs text-slate-400">{topStudents.length} студентов</span>
-              </div>
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="text-left px-6 py-3 text-slate-500 font-medium w-8">#</th>
-                    <th className="text-left px-4 py-3 text-slate-500 font-medium">ФИО</th>
-                    <th className="text-left px-4 py-3 text-slate-500 font-medium">Группа</th>
-                    <th className="text-right px-6 py-3 text-slate-500 font-medium">Средний балл</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
+            <Paper elevation={2} sx={{ overflow: 'hidden' }}>
+              <Box sx={{ px: 3, py: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant="subtitle1" fontWeight={600}>Рейтинг студентов</Typography>
+                <Typography variant="caption" color="text.disabled">{topStudents.length} студентов</Typography>
+              </Box>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ width: 40 }}>#</TableCell>
+                    <TableCell>ФИО</TableCell>
+                    <TableCell>Группа</TableCell>
+                    <TableCell align="right">Средний балл</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {topStudents.map((s, i) => (
-                    <tr
-                      key={s.id}
-                      onClick={() => navigate(`/my-students/${s.id}`)}
-                      className="hover:bg-blue-50 cursor-pointer transition-colors"
-                    >
-                      <td className="px-6 py-3 font-medium" style={{
-                        color: i === 0 ? '#f59e0b' : i === 1 ? '#94a3b8' : i === 2 ? '#b45309' : '#94a3b8'
-                      }}>
+                    <TableRow key={s.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/my-students/${s.id}`)}>
+                      <TableCell sx={{ fontWeight: 500, color: i === 0 ? '#f59e0b' : i === 1 ? '#94a3b8' : i === 2 ? '#b45309' : 'text.disabled' }}>
                         {i + 1}
-                      </td>
-                      <td className="px-4 py-3 text-slate-800 font-medium">{s.name}</td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{s.group}</td>
-                      <td className="px-6 py-3 text-right">
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                          s.avg_grade >= 4.5 ? 'bg-emerald-100 text-emerald-700' :
-                          s.avg_grade >= 3.5 ? 'bg-blue-100 text-blue-700' :
-                          'bg-amber-100 text-amber-700'
-                        }`}>
-                          {Number(s.avg_grade).toFixed(2)}
-                        </span>
-                      </td>
-                    </tr>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 500 }}>{s.name}</TableCell>
+                      <TableCell sx={{ color: 'text.disabled', fontSize: 12 }}>{s.group}</TableCell>
+                      <TableCell align="right">
+                        <Chip label={Number(s.avg_grade).toFixed(2)} size="small" sx={gradeChip(Number(s.avg_grade))} />
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Paper>
           )}
         </>
       )}
-    </div>
-  )
-}
-
-function Spinner() {
-  return (
-    <div className="p-8 flex items-center gap-3 text-slate-400">
-      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      Загрузка...
-    </div>
+    </Box>
   )
 }
