@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import client from '../../api/client'
-import { getSubjects } from '../../api/resources'
+import { getSubjects, getMyTeacherProfile, getAssignments } from '../../api/resources'
 import type { Subject } from '../../api/resources'
 
 interface TestOut {
@@ -25,16 +25,32 @@ export default function TestsPage() {
   const navigate = useNavigate()
   const [tests, setTests] = useState<TestOut[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
+  // Только предметы, которые ведёт текущий преподаватель
+  const [mySubjects, setMySubjects] = useState<Subject[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [showPicker, setShowPicker] = useState(false)
+  const [pickedSubjectId, setPickedSubjectId] = useState<number | null>(null)
   const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     Promise.all([
       client.get<TestOut[]>('/tests').then(r => r.data),
       getSubjects(),
-    ]).then(([t, s]) => { setTests(t); setSubjects(s) })
-      .finally(() => setLoading(false))
+      getMyTeacherProfile()
+        .then(t => getAssignments(t.id))
+        .then(asgns => {
+          const ids = [...new Set(asgns.map(a => a.subject_id))]
+          return ids
+        })
+        .catch(() => [] as number[]),
+    ]).then(([t, allSubs, mySubjectIds]) => {
+      setTests(t)
+      setSubjects(allSubs)
+      const mine = allSubs.filter(s => mySubjectIds.includes(s.id))
+      setMySubjects(mine)
+      if (mine.length > 0) setPickedSubjectId(mine[0].id)
+    }).finally(() => setLoading(false))
   }, [])
 
   const subjectMap = Object.fromEntries(subjects.map(s => [s.id, s.name]))
@@ -45,18 +61,26 @@ export default function TestsPage() {
   )
 
   async function handleCreate() {
-    if (!subjects.length) return alert('Нет доступных предметов')
+    if (!mySubjects.length) return alert('У вас нет назначенных предметов')
+    setShowPicker(true)
+  }
+
+  async function confirmCreate() {
+    if (!pickedSubjectId) return
     setCreating(true)
     try {
       const { data } = await client.post<TestOut>('/tests', {
-        subject_id: subjects[0].id,
+        subject_id: pickedSubjectId,
         title: 'Новый тест',
         passing_score_pct: 60,
         attempts_allowed: 1,
       })
       navigate(`/tests/${data.id}`)
+    } catch (e: any) {
+      alert(e?.response?.data?.detail ?? 'Ошибка создания теста')
     } finally {
       setCreating(false)
+      setShowPicker(false)
     }
   }
 
@@ -64,6 +88,32 @@ export default function TestsPage() {
 
   return (
     <div className="p-8 max-w-5xl">
+      {/* Модал выбора предмета */}
+      {showPicker && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <h2 className="text-base font-semibold text-slate-800 mb-1">Выберите предмет</h2>
+            <p className="text-sm text-slate-400 mb-4">Тест будет создан по выбранному предмету</p>
+            <select
+              value={pickedSubjectId ?? ''}
+              onChange={e => setPickedSubjectId(Number(e.target.value))}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {mySubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowPicker(false)}
+                className="px-4 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50">
+                Отмена
+              </button>
+              <button onClick={confirmCreate} disabled={creating || !pickedSubjectId}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {creating ? 'Создание...' : 'Создать'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-slate-800 mb-1">Тесты</h1>

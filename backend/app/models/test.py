@@ -56,11 +56,12 @@ class TestQuestion(Base):
 
 class TestAssignment(Base):
     __tablename__ = "test_assignments"
-    __table_args__ = (UniqueConstraint("test_id", "group_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     test_id: Mapped[int] = mapped_column(Integer, ForeignKey("tests.id", ondelete="CASCADE"), nullable=False)
     group_id: Mapped[int] = mapped_column(Integer, ForeignKey("groups.id", ondelete="CASCADE"), nullable=False)
+    # Если student_id задан — назначение персональное (только для этого студента)
+    student_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=True)
     assigned_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("teachers.id", ondelete="SET NULL"), nullable=True)
     available_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     available_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.models.test import Test, TestQuestion, TestAssignment
 from app.models.question import Question
+from app.models.teaching_assignment import TeachingAssignment
 from app.models.student import Student
 from app.models.test_session import TestSession, SessionStatus
 from app.models.teacher import Teacher
@@ -25,13 +26,21 @@ async def _get_teacher_id(current_user: User, db: AsyncSession) -> int | None:
     return None
 
 
+async def _require_author(test: Test, teacher_id: int | None) -> None:
+    """Проверяет, что текущий преподаватель является автором теста."""
+    if teacher_id is None:
+        # admin — разрешаем всё
+        return
+    if test.author_id != teacher_id:
+        raise HTTPException(403, "Вы не являетесь автором этого теста")
+
+
 @router.get("/my-available")
 async def my_available_tests(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_student),
 ):
     """Тесты, доступные для прохождения текущим студентом."""
-    # Получаем студента
     st_result = await db.execute(select(Student).where(Student.user_id == current_user.id))
     student = st_result.scalar_one_or_none()
     if not student:
@@ -39,15 +48,26 @@ async def my_available_tests(
 
     now = datetime.utcnow()
 
-    # Назначения тестов на группу студента
+    # Групповые (student_id IS NULL) + персональные для этого студента
     ta_result = await db.execute(
         select(TestAssignment)
         .options(selectinload(TestAssignment.test))
-        .where(TestAssignment.group_id == student.group_id)
+        .where(
+            (TestAssignment.group_id == student.group_id) &
+            (
+                (TestAssignment.student_id == None) |
+                (TestAssignment.student_id == student.id)
+            )
+        )
     )
-    assignments = ta_result.scalars().all()
+    all_ta = ta_result.scalars().all()
+    # Если для одного теста есть и групповое, и персональное — персональное имеет приоритет
+    seen: dict[int, TestAssignment] = {}
+    for ta in all_ta:
+        if ta.test_id not in seen or ta.student_id is not None:
+            seen[ta.test_id] = ta
+    assignments = list(seen.values())
 
-    # Сессии студента сгруппированные по test_id
     sess_result = await db.execute(
         select(TestSession).where(TestSession.student_id == student.id)
     )
@@ -62,7 +82,6 @@ async def my_available_tests(
         if test.status.value != "published":
             continue
 
-        # Проверяем даты доступности (приоритет у TestAssignment, иначе у Test)
         avail_from = ta.available_from or test.available_from
         avail_to = ta.available_to or test.available_to
         if avail_from and now < avail_from.replace(tzinfo=None):
@@ -113,9 +132,13 @@ async def list_tests(
     subject_id: int | None = None,
     status: str | None = None,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
+    teacher_id = await _get_teacher_id(current_user, db)
     query = select(Test).order_by(Test.created_at.desc())
+    # Преподаватель видит только свои тесты; admin видит все
+    if teacher_id is not None:
+        query = query.where(Test.author_id == teacher_id)
     if subject_id:
         query = query.where(Test.subject_id == subject_id)
     if status:
@@ -131,6 +154,15 @@ async def create_test(
     current_user: User = Depends(require_teacher),
 ):
     author_id = await _get_teacher_id(current_user, db)
+    if author_id:
+        asgn = await db.execute(
+            select(TeachingAssignment).where(
+                TeachingAssignment.teacher_id == author_id,
+                TeachingAssignment.subject_id == data.subject_id,
+            ).limit(1)
+        )
+        if not asgn.scalars().first():
+            raise HTTPException(403, "Вы не ведёте этот предмет")
     test = Test(**data.model_dump(), author_id=author_id)
     db.add(test)
     await db.commit()
@@ -142,12 +174,14 @@ async def create_test(
 async def get_test(
     test_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
+    teacher_id = await _get_teacher_id(current_user, db)
     result = await db.execute(select(Test).where(Test.id == test_id))
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
+    await _require_author(test, teacher_id)
     return test
 
 
@@ -156,12 +190,14 @@ async def update_test(
     test_id: int,
     data: TestUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
+    teacher_id = await _get_teacher_id(current_user, db)
     result = await db.execute(select(Test).where(Test.id == test_id))
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
+    await _require_author(test, teacher_id)
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(test, field, value)
     await db.commit()
@@ -174,8 +210,14 @@ async def remove_test_assignment(
     test_id: int,
     assignment_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
+    teacher_id = await _get_teacher_id(current_user, db)
+    test_res = await db.execute(select(Test).where(Test.id == test_id))
+    test = test_res.scalar_one_or_none()
+    if not test:
+        raise HTTPException(status_code=404, detail="Тест не найден")
+    await _require_author(test, teacher_id)
     result = await db.execute(
         select(TestAssignment).where(
             TestAssignment.id == assignment_id,
@@ -193,12 +235,23 @@ async def remove_test_assignment(
 async def delete_test(
     test_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
+    teacher_id = await _get_teacher_id(current_user, db)
     result = await db.execute(select(Test).where(Test.id == test_id))
     test = result.scalar_one_or_none()
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
+    await _require_author(test, teacher_id)
+    # Запрещаем удаление, если тест уже кто-то проходил
+    sessions_count = await db.execute(
+        select(func.count()).where(TestSession.test_id == test_id)
+    )
+    if sessions_count.scalar() > 0:
+        raise HTTPException(
+            status_code=409,
+            detail="Тест нельзя удалить: он уже был пройден студентами. Переведите его в архив.",
+        )
     await db.delete(test)
     await db.commit()
 
@@ -209,8 +262,14 @@ async def delete_test(
 async def get_test_questions(
     test_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
+    teacher_id = await _get_teacher_id(current_user, db)
+    test_res = await db.execute(select(Test).where(Test.id == test_id))
+    test = test_res.scalar_one_or_none()
+    if not test:
+        raise HTTPException(status_code=404, detail="Тест не найден")
+    await _require_author(test, teacher_id)
     result = await db.execute(
         select(TestQuestion)
         .options(selectinload(TestQuestion.question))
@@ -242,8 +301,14 @@ async def get_test_questions(
 async def get_test_assignments(
     test_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
+    teacher_id = await _get_teacher_id(current_user, db)
+    test_res = await db.execute(select(Test).where(Test.id == test_id))
+    test = test_res.scalar_one_or_none()
+    if not test:
+        raise HTTPException(status_code=404, detail="Тест не найден")
+    await _require_author(test, teacher_id)
     result = await db.execute(
         select(TestAssignment).where(TestAssignment.test_id == test_id)
     )
@@ -255,11 +320,14 @@ async def add_question_to_test(
     test_id: int,
     data: TestQuestionAdd,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
+    teacher_id = await _get_teacher_id(current_user, db)
     result = await db.execute(select(Test).where(Test.id == test_id))
-    if not result.scalar_one_or_none():
+    test = result.scalar_one_or_none()
+    if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
+    await _require_author(test, teacher_id)
     tq = TestQuestion(test_id=test_id, **data.model_dump())
     db.add(tq)
     await db.commit()
@@ -271,8 +339,14 @@ async def remove_question_from_test(
     test_id: int,
     question_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
+    teacher_id = await _get_teacher_id(current_user, db)
+    test_res = await db.execute(select(Test).where(Test.id == test_id))
+    test = test_res.scalar_one_or_none()
+    if not test:
+        raise HTTPException(status_code=404, detail="Тест не найден")
+    await _require_author(test, teacher_id)
     result = await db.execute(
         select(TestQuestion).where(
             TestQuestion.test_id == test_id,
@@ -296,9 +370,29 @@ async def assign_test_to_group(
     current_user: User = Depends(require_teacher),
 ):
     teacher_id = await _get_teacher_id(current_user, db)
+
+    test_res = await db.execute(select(Test).where(Test.id == test_id))
+    test = test_res.scalar_one_or_none()
+    if not test:
+        raise HTTPException(404, "Тест не найден")
+
+    await _require_author(test, teacher_id)
+
+    if teacher_id:
+        asgn = await db.execute(
+            select(TeachingAssignment).where(
+                TeachingAssignment.teacher_id == teacher_id,
+                TeachingAssignment.subject_id == test.subject_id,
+                TeachingAssignment.group_id == data.group_id,
+            ).limit(1)
+        )
+        if not asgn.scalars().first():
+            raise HTTPException(403, "Вы не ведёте этот предмет у данной группы")
+
     ta = TestAssignment(
         test_id=test_id,
         group_id=data.group_id,
+        student_id=data.student_id,
         assigned_by=teacher_id,
         available_from=data.available_from,
         available_to=data.available_to,

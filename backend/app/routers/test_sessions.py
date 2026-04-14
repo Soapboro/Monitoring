@@ -256,12 +256,7 @@ async def _auto_grade(
     pct: float,
     passed: bool,
 ) -> None:
-    """Создаёт запись Grade по результату теста (если не создана ранее)."""
-    # Не дублируем оценку при повторном вызове
-    existing = await db.execute(select(Grade).where(Grade.session_id == session.id))
-    if existing.scalar_one_or_none():
-        return
-
+    """1 оценка на тест. При нескольких попытках сохраняется лучший результат."""
     # Ищем учебное назначение: предмет теста + группа студента
     asgn_q = await db.execute(
         select(TeachingAssignment).where(
@@ -283,19 +278,41 @@ async def _auto_grade(
     else:
         value = 2.0
 
-    grade = Grade(
-        student_id=student.id,
-        assignment_id=assignment.id,
-        grade_type=GradeType.current,
-        value=value,
-        passed=passed,
-        comment=f"Авто: {session.test.title}",
-        date_recorded=date.today(),
-        recorded_by=assignment.teacher_id,
-        session_id=session.id,
+    # Ищем существующую оценку за этот тест (любая попытка)
+    existing_q = await db.execute(
+        select(Grade)
+        .join(TestSession, Grade.session_id == TestSession.id)
+        .where(
+            Grade.student_id == student.id,
+            Grade.assignment_id == assignment.id,
+            TestSession.test_id == session.test_id,
+        )
     )
-    db.add(grade)
-    await db.commit()
+    existing = existing_q.scalars().first()
+
+    if existing:
+        # Обновляем только если текущая попытка лучше
+        if value > float(existing.value or 0):
+            existing.value = value
+            existing.passed = passed
+            existing.session_id = session.id
+            existing.comment = f"Авто (лучшая попытка): {session.test.title}"
+            existing.date_recorded = date.today()
+            await db.commit()
+    else:
+        grade = Grade(
+            student_id=student.id,
+            assignment_id=assignment.id,
+            grade_type=GradeType.test,
+            value=value,
+            passed=passed,
+            comment=f"Авто: {session.test.title}",
+            date_recorded=date.today(),
+            recorded_by=assignment.teacher_id,
+            session_id=session.id,
+        )
+        db.add(grade)
+        await db.commit()
 
 
 async def _update_adaptive(

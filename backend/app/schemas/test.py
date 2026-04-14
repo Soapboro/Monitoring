@@ -63,6 +63,7 @@ class TestOut(BaseModel):
 class TestAssignmentCreate(BaseModel):
     test_id: int
     group_id: int
+    student_id: int | None = None
     available_from: datetime | None = None
     available_to: datetime | None = None
 
@@ -71,6 +72,7 @@ class TestAssignmentOut(BaseModel):
     id: int
     test_id: int
     group_id: int
+    student_id: int | None
     assigned_by: int | None
     available_from: datetime | None
     available_to: datetime | None

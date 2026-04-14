@@ -1,15 +1,60 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
 
-*, *::before, *::after {
-  box-sizing: border-box;
+@theme {
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+
+  /* blue → мягкая терракота */
+  --color-blue-50:  #fff5f0;
+  --color-blue-100: #ffe8dc;
+  --color-blue-200: #ffcfba;
+  --color-blue-300: #ffb096;
+  --color-blue-400: #f78c6c;
+  --color-blue-500: #e8724e;
+  --color-blue-600: #d45a38;
+  --color-blue-700: #b84628;
+  --color-blue-800: #923618;
+
+  /* slate → тёплый бежево-коричневый */
+  --color-slate-50:  #fdf8f5;
+  --color-slate-100: #f5edea;
+  --color-slate-200: #efd8d2;
+  --color-slate-300: #d4b8b0;
+  --color-slate-400: #ba9488;
+  --color-slate-500: #9a6e62;
+  --color-slate-600: #7a5244;
+  --color-slate-700: #5a3826;
+  --color-slate-800: #3d2416;
+  --color-slate-900: #2e1a10;
+
+  /* emerald → шалфей */
+  --color-emerald-50:  #f0f9f4;
+  --color-emerald-100: #d4eddf;
+  --color-emerald-600: #4a9b72;
+  --color-emerald-700: #347856;
+
+  /* amber — тёплый */
+  --color-amber-100: #fef0d8;
+  --color-amber-700: #9a6a18;
+
+  /* red — тёплый */
+  --color-red-50:  #fff1ef;
+  --color-red-100: #f4d0cc;
+  --color-red-500: #d05050;
+  --color-red-600: #b03838;
 }
+
+*, *::before, *::after { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  background: #fdf8f5;
 }
 
-#root {
-  min-height: 100vh;
-}
+#root { min-height: 100vh; }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d4b8b0; border-radius: 99px; }

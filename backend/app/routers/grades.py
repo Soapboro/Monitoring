@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.grade import Grade
 from app.models.teacher import Teacher
+from app.models.teaching_assignment import TeachingAssignment
 from app.models.user import User
 from app.schemas.grade import GradeCreate, GradeUpdate, GradeOut
 from app.dependencies import require_teacher, get_current_user
@@ -47,6 +48,18 @@ async def create_grade(
     current_user: User = Depends(require_teacher),
 ):
     teacher_id = await _teacher_id(current_user, db)
+
+    # Преподаватель может ставить оценки только по своим учебным назначениям
+    if current_user.role.value == "teacher":
+        ta_res = await db.execute(
+            select(TeachingAssignment).where(
+                TeachingAssignment.id == data.assignment_id,
+                TeachingAssignment.teacher_id == teacher_id,
+            ).limit(1)
+        )
+        if not ta_res.scalars().first():
+            raise HTTPException(403, "Вы не ведёте этот предмет у данной группы")
+
     dump = data.model_dump(exclude_none=True)
     dump.setdefault("date_recorded", date.today())
     grade = Grade(**dump, recorded_by=teacher_id)

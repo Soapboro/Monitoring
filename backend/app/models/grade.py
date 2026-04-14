@@ -12,6 +12,7 @@ class GradeType(str, enum.Enum):
     midterm = "midterm"
     final = "final"
     attendance = "attendance"
+    test = "test"
 
 
 class Grade(Base):

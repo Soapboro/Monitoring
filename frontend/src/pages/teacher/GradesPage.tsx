@@ -13,6 +13,37 @@ interface EnrichedGrade extends GradeOut {
   assignment: TeachingAssignment
 }
 
+interface EditState {
+  grade_type: string
+  value: string
+  passed: string   // 'true' | 'false' | 'null'
+  comment: string
+  date_recorded: string
+}
+
+const GRADE_TYPES = [
+  { value: 'current',    label: 'Текущая' },
+  { value: 'thematic',   label: 'Тематическая' },
+  { value: 'midterm',    label: 'Промежуточная' },
+  { value: 'final',      label: 'Итоговая' },
+  { value: 'attendance', label: 'Посещаемость' },
+  { value: 'test',       label: 'Тестирование' },
+]
+
+function gradeTypeLabel(type: string) {
+  return GRADE_TYPES.find(t => t.value === type)?.label ?? type
+}
+
+function toEditState(g: EnrichedGrade): EditState {
+  return {
+    grade_type: g.grade_type,
+    value: g.value !== null ? String(g.value) : '',
+    passed: g.passed === true ? 'true' : g.passed === false ? 'false' : 'null',
+    comment: g.comment ?? '',
+    date_recorded: g.date_recorded.slice(0, 10),
+  }
+}
+
 export default function GradesPage() {
   const navigate = useNavigate()
   const [grades, setGrades] = useState<EnrichedGrade[]>([])
@@ -20,6 +51,9 @@ export default function GradesPage() {
   const [gradeTypes, setGradeTypes] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<number | null>(null)
+  const [editing, setEditing] = useState<number | null>(null)
+  const [editState, setEditState] = useState<EditState | null>(null)
+  const [saving, setSaving] = useState(false)
 
   // Filters
   const [search, setSearch] = useState('')
@@ -33,7 +67,6 @@ export default function GradesPage() {
         const teacher = await getMyTeacherProfile()
         const assignments: TeachingAssignment[] = await getAssignments(teacher.id)
 
-        // Subject map
         const subjectIds = [...new Set(assignments.map(a => a.subject_id))]
         const subjectMap: Record<number, string> = {}
         const subjectList: Subject[] = []
@@ -47,11 +80,9 @@ export default function GradesPage() {
         )
         setSubjects(subjectList.sort((a, b) => a.name.localeCompare(b.name)))
 
-        // Assignment map
         const assignmentMap: Record<number, TeachingAssignment> = {}
         for (const a of assignments) assignmentMap[a.id] = a
 
-        // All grades
         const rawGrades: GradeOut[] = []
         await Promise.all(
           assignments.map(a =>
@@ -61,7 +92,6 @@ export default function GradesPage() {
           )
         )
 
-        // Student map
         const studentIds = [...new Set(rawGrades.map(g => g.student_id))]
         const studentMap: Record<number, string> = {}
         await Promise.all(
@@ -120,7 +150,58 @@ export default function GradesPage() {
     return ''
   })
 
-  const toggle = (id: number) => setExpanded(prev => (prev === id ? null : id))
+  const toggle = (id: number) => {
+    if (expanded === id) {
+      setExpanded(null)
+      setEditing(null)
+      setEditState(null)
+    } else {
+      setExpanded(id)
+      setEditing(null)
+      setEditState(null)
+    }
+  }
+
+  function startEdit(g: EnrichedGrade, e: React.MouseEvent) {
+    e.stopPropagation()
+    setEditing(g.id)
+    setEditState(toEditState(g))
+  }
+
+  function cancelEdit(e: React.MouseEvent) {
+    e.stopPropagation()
+    setEditing(null)
+    setEditState(null)
+  }
+
+  async function saveEdit(g: EnrichedGrade, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!editState) return
+    setSaving(true)
+    try {
+      const payload: Record<string, unknown> = {
+        grade_type: editState.grade_type,
+        comment: editState.comment || null,
+        date_recorded: editState.date_recorded,
+      }
+      if (editState.value !== '') payload.value = Number(editState.value)
+      if (editState.passed !== 'null') payload.passed = editState.passed === 'true'
+
+      const { data } = await client.patch<GradeOut>(`/grades/${g.id}`, payload)
+
+      setGrades(prev => prev.map(gr =>
+        gr.id === g.id
+          ? { ...gr, ...data }
+          : gr
+      ))
+      setEditing(null)
+      setEditState(null)
+    } catch (err: any) {
+      alert(err?.response?.data?.detail ?? 'Ошибка сохранения')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const hasFilters = search || subjectFilter !== 'all' || typeFilter !== 'all' || valueFilter !== 'all'
 
@@ -194,7 +275,6 @@ export default function GradesPage() {
         )}
       </div>
 
-      {/* Count */}
       {grades.length > 0 && (
         <p className="text-xs text-slate-400 mb-3">
           Показано: {filtered.length} из {grades.length}
@@ -252,44 +332,141 @@ export default function GradesPage() {
                   </tr>
 
                   {expanded === g.id && (
-                    <tr key={`${g.id}-detail`} className="bg-blue-50/50">
-                      <td colSpan={6} className="px-8 py-4">
-                        <div className="grid grid-cols-2 gap-x-12 gap-y-2 text-sm">
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-500">Студент: </span>
+                    <tr key={`${g.id}-detail`} className="bg-slate-50/70">
+                      <td colSpan={6} className="px-8 py-5">
+                        {editing === g.id && editState ? (
+                          /* ── Режим редактирования ── */
+                          <div onClick={e => e.stopPropagation()}>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Редактирование оценки</p>
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                              {/* Тип */}
+                              <label className="flex flex-col gap-1">
+                                <span className="text-slate-500 text-xs">Тип оценки</span>
+                                <select
+                                  value={editState.grade_type}
+                                  onChange={e => setEditState(s => s && ({ ...s, grade_type: e.target.value }))}
+                                  className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                                >
+                                  {GRADE_TYPES.map(t => (
+                                    <option key={t.value} value={t.value}>{t.label}</option>
+                                  ))}
+                                </select>
+                              </label>
+
+                              {/* Дата */}
+                              <label className="flex flex-col gap-1">
+                                <span className="text-slate-500 text-xs">Дата</span>
+                                <input
+                                  type="date"
+                                  value={editState.date_recorded}
+                                  onChange={e => setEditState(s => s && ({ ...s, date_recorded: e.target.value }))}
+                                  className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                                />
+                              </label>
+
+                              {/* Оценка */}
+                              <label className="flex flex-col gap-1">
+                                <span className="text-slate-500 text-xs">Балл (1–5, оставьте пустым для зачёт/незачёт)</span>
+                                <input
+                                  type="number"
+                                  min={1} max={5} step={1}
+                                  value={editState.value}
+                                  onChange={e => setEditState(s => s && ({ ...s, value: e.target.value }))}
+                                  placeholder="—"
+                                  className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white w-24"
+                                />
+                              </label>
+
+                              {/* Зачёт/незачёт */}
+                              <label className="flex flex-col gap-1">
+                                <span className="text-slate-500 text-xs">Зачёт / незачёт</span>
+                                <select
+                                  value={editState.passed}
+                                  onChange={e => setEditState(s => s && ({ ...s, passed: e.target.value }))}
+                                  className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                                >
+                                  <option value="null">Не задан</option>
+                                  <option value="true">Зачёт</option>
+                                  <option value="false">Незачёт</option>
+                                </select>
+                              </label>
+
+                              {/* Комментарий */}
+                              <label className="flex flex-col gap-1 col-span-2">
+                                <span className="text-slate-500 text-xs">Комментарий</span>
+                                <input
+                                  type="text"
+                                  value={editState.comment}
+                                  onChange={e => setEditState(s => s && ({ ...s, comment: e.target.value }))}
+                                  placeholder="Необязательно"
+                                  className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+                                />
+                              </label>
+                            </div>
+
+                            <div className="flex gap-2 mt-4">
+                              <button
+                                onClick={e => saveEdit(g, e)}
+                                disabled={saving}
+                                className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                              >
+                                {saving ? 'Сохранение...' : 'Сохранить'}
+                              </button>
+                              <button
+                                onClick={cancelEdit}
+                                className="px-4 py-1.5 text-sm border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors"
+                              >
+                                Отмена
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* ── Режим просмотра ── */
+                          <div>
+                            <div className="grid grid-cols-2 gap-x-12 gap-y-2 text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-500">Студент: </span>
+                                <button
+                                  onClick={e => { e.stopPropagation(); navigate(`/students/${g.student_id}`) }}
+                                  className="text-blue-600 font-medium hover:underline cursor-pointer"
+                                >
+                                  {g.studentName}
+                                </button>
+                              </div>
+                              <DetailRow label="Предмет" value={g.subjectName} />
+                              <DetailRow label="Тип оценки" value={gradeTypeLabel(g.grade_type)} />
+                              <DetailRow
+                                label="Оценка / результат"
+                                value={
+                                  g.value !== null ? String(g.value)
+                                  : g.passed !== null ? (g.passed ? 'Зачёт' : 'Незачёт')
+                                  : '—'
+                                }
+                              />
+                              {g.assignment && (
+                                <>
+                                  <DetailRow label="Учебный год" value={g.assignment.acad_year} />
+                                  <DetailRow label="Семестр" value={String(g.assignment.semester)} />
+                                </>
+                              )}
+                              {g.session_id !== null && (
+                                <DetailRow label="Сессия #" value={String(g.session_id)} />
+                              )}
+                              {g.comment && (
+                                <div className="col-span-2">
+                                  <span className="text-slate-500">Комментарий: </span>
+                                  <span className="text-slate-700">{g.comment}</span>
+                                </div>
+                              )}
+                            </div>
                             <button
-                              onClick={e => { e.stopPropagation(); navigate(`/students/${g.student_id}`) }}
-                              className="text-blue-600 font-medium hover:underline cursor-pointer"
+                              onClick={e => startEdit(g, e)}
+                              className="mt-3 px-3 py-1.5 text-xs font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
                             >
-                              {g.studentName}
+                              Изменить
                             </button>
                           </div>
-                          <DetailRow label="Предмет" value={g.subjectName} />
-                          <DetailRow label="Тип оценки" value={gradeTypeLabel(g.grade_type)} />
-                          <DetailRow
-                            label="Оценка / результат"
-                            value={
-                              g.value !== null ? String(g.value)
-                              : g.passed !== null ? (g.passed ? 'Зачёт' : 'Незачёт')
-                              : '—'
-                            }
-                          />
-                          {g.assignment && (
-                            <>
-                              <DetailRow label="Учебный год" value={g.assignment.acad_year} />
-                              <DetailRow label="Семестр" value={String(g.assignment.semester)} />
-                            </>
-                          )}
-                          {g.session_id !== null && (
-                            <DetailRow label="Сессия #" value={String(g.session_id)} />
-                          )}
-                          {g.comment && (
-                            <div className="col-span-2">
-                              <span className="text-slate-500">Комментарий: </span>
-                              <span className="text-slate-700">{g.comment}</span>
-                            </div>
-                          )}
-                        </div>
+                        )}
                       </td>
                     </tr>
                   )}
@@ -310,17 +487,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
       <span className="text-slate-700 font-medium">{value}</span>
     </div>
   )
-}
-
-function gradeTypeLabel(type: string) {
-  const map: Record<string, string> = {
-    exam: 'Экзамен',
-    credit: 'Зачёт',
-    current: 'Текущая',
-    midterm: 'Промежуточная',
-    final: 'Итоговая',
-  }
-  return map[type] ?? type
 }
 
 function Spinner() {

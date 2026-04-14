@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import client from '../../api/client'
-import { getSubjects, getGroups } from '../../api/resources'
-import type { Subject, Group } from '../../api/resources'
+import { getSubjects, getGroups, getMyTeacherProfile, getAssignments } from '../../api/resources'
+import type { Subject, Group, TeachingAssignment } from '../../api/resources'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ interface TQOut {
 }
 
 interface Topic { id: number; subject_id: number; title: string }
-interface TestAssignment { id: number; test_id: number; group_id: number; available_from: string | null; available_to: string | null }
+interface TestAssignment { id: number; test_id: number; group_id: number; student_id: number | null; available_from: string | null; available_to: string | null }
 
 type QType = 'single_choice' | 'multiple_choice' | 'text_input' | 'matching'
 const QTYPES: { value: QType; label: string }[] = [
@@ -519,11 +519,18 @@ export default function TestEditorPage() {
   const [questions, setQuestions] = useState<TQOut[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [groups, setGroups] = useState<Group[]>([])
+  // Группы, у которых преподаватель ведёт предмет этого теста
+  const [allowedGroupIds, setAllowedGroupIds] = useState<Set<number>>(new Set())
   const [assignments, setAssignments] = useState<TestAssignment[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'settings' | 'questions' | 'assign'>('settings')
   const [modal, setModal] = useState<TQOut | null | 'new'>(null)
   const [saving, setSaving] = useState(false)
+
+  // Студенты по группам для персонального назначения
+  const [groupStudents, setGroupStudents] = useState<Record<number, { id: number; first_name: string; last_name: string; middle_name: string | null }[]>>({})
+  const [newStudentAssign, setNewStudentAssign] = useState<{ groupId: number | null; studentId: number | null; from: string; to: string }>({ groupId: null, studentId: null, from: '', to: '' })
+  const [assigningStudent, setAssigningStudent] = useState(false)
 
   // Settings form state
   const [form, setForm] = useState<Partial<TestOut>>({})
@@ -535,9 +542,19 @@ export default function TestEditorPage() {
       client.get<TestAssignment[]>(`/tests/${testId}/assignments`).then(r => r.data),
       getSubjects(),
       getGroups(),
-    ]).then(([t, qs, ta, subs, grps]) => {
+      getMyTeacherProfile()
+        .then(t => getAssignments(t.id))
+        .catch(() => [] as TeachingAssignment[]),
+    ]).then(([t, qs, ta, subs, grps, myAsgns]) => {
       setTest(t); setForm(t); setQuestions(qs); setAssignments(ta)
       setSubjects(subs); setGroups(grps)
+      // Группы, у которых преподаватель ведёт предмет теста
+      const ids = new Set(
+        myAsgns
+          .filter((a: TeachingAssignment) => a.subject_id === t.subject_id)
+          .map((a: TeachingAssignment) => a.group_id)
+      )
+      setAllowedGroupIds(ids)
     }).finally(() => setLoading(false))
   }, [testId])
 
@@ -579,12 +596,26 @@ export default function TestEditorPage() {
     setQuestions(newOrder)
   }
 
+  // Загружаем студентов по группам при переходе на вкладку назначений
+  useEffect(() => {
+    if (tab !== 'assign' || allowedGroupIds.size === 0) return
+    for (const gid of allowedGroupIds) {
+      if (groupStudents[gid]) continue
+      client.get<{ id: number; first_name: string; last_name: string; middle_name: string | null }[]>(
+        '/students', { params: { group_id: gid } }
+      ).then(r => {
+        setGroupStudents(prev => ({ ...prev, [gid]: r.data }))
+      })
+    }
+  }, [tab, allowedGroupIds])
+
   // Assign tab
-  const assignedGroupIds = new Set(assignments.map(a => a.group_id))
+  const assignedGroupIds = new Set(assignments.filter(a => a.student_id == null).map(a => a.group_id))
+  const studentAssignments = assignments.filter(a => a.student_id != null)
   const [assignDates, setAssignDates] = useState<Record<number, { from: string; to: string }>>({})
 
   async function toggleAssign(groupId: number) {
-    const existing = assignments.find(a => a.group_id === groupId)
+    const existing = assignments.find(a => a.group_id === groupId && a.student_id == null)
     if (existing) {
       await client.delete(`/tests/${testId}/assignments/${existing.id}`)
       setAssignments(a => a.filter(x => x.id !== existing.id))
@@ -593,10 +624,32 @@ export default function TestEditorPage() {
       const { data } = await client.post<TestAssignment>(`/tests/${testId}/assign`, {
         test_id: testId,
         group_id: groupId,
+        student_id: null,
         available_from: dates?.from || null,
         available_to: dates?.to || null,
       })
       setAssignments(a => [...a, data])
+    }
+  }
+
+  async function assignToStudent() {
+    const { groupId, studentId, from, to } = newStudentAssign
+    if (!groupId || !studentId) return
+    setAssigningStudent(true)
+    try {
+      const { data } = await client.post<TestAssignment>(`/tests/${testId}/assign`, {
+        test_id: testId,
+        group_id: groupId,
+        student_id: studentId,
+        available_from: from || null,
+        available_to: to || null,
+      })
+      setAssignments(a => [...a, data])
+      setNewStudentAssign({ groupId, studentId: null, from: '', to: '' })
+    } catch (err: any) {
+      alert(err?.response?.data?.detail ?? 'Ошибка назначения')
+    } finally {
+      setAssigningStudent(false)
     }
   }
 
@@ -630,6 +683,20 @@ export default function TestEditorPage() {
               {a.label}
             </button>
           ))}
+          <button
+            onClick={async () => {
+              if (!confirm('Удалить тест? Это действие нельзя отменить.')) return
+              try {
+                await client.delete(`/tests/${testId}`)
+                navigate('/tests')
+              } catch (err: any) {
+                alert(err?.response?.data?.detail ?? 'Ошибка удаления')
+              }
+            }}
+            className="px-3 py-1.5 text-sm rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+          >
+            Удалить
+          </button>
         </div>
       </div>
 
@@ -770,35 +837,151 @@ export default function TestEditorPage() {
 
       {/* ── Assign tab ── */}
       {tab === 'assign' && (
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-100">
-            <p className="text-sm text-slate-500">Выберите группы, которым доступен тест. Даты переопределяют глобальные настройки.</p>
+        <div className="space-y-4">
+
+          {/* Секция: по группе */}
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-700">По группе</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Доступ получат все студенты группы</p>
+            </div>
+            {allowedGroupIds.size === 0 ? (
+              <div className="px-6 py-8 text-center text-slate-400 text-sm">
+                Нет групп, которым вы ведёте этот предмет
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {groups.filter(g => allowedGroupIds.has(g.id)).map(g => {
+                  const isAssigned = assignedGroupIds.has(g.id)
+                  return (
+                    <div key={g.id} className="px-6 py-4 flex items-center gap-4">
+                      <input type="checkbox" checked={isAssigned}
+                        onChange={() => toggleAssign(g.id)}
+                        className="accent-blue-600 w-4 h-4 shrink-0" />
+                      <span className="text-sm font-medium text-slate-800 w-32 shrink-0">{g.name}</span>
+                      <div className="flex items-center gap-2 flex-1">
+                        <input type="datetime-local"
+                          value={assignDates[g.id]?.from ?? ''}
+                          onChange={e => setAssignDates(d => ({ ...d, [g.id]: { ...d[g.id], from: e.target.value } }))}
+                          className="text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        <span className="text-slate-400 text-xs">—</span>
+                        <input type="datetime-local"
+                          value={assignDates[g.id]?.to ?? ''}
+                          onChange={e => setAssignDates(d => ({ ...d, [g.id]: { ...d[g.id], to: e.target.value } }))}
+                          className="text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      </div>
+                      {isAssigned && <span className="text-xs text-emerald-600 shrink-0">Выдан</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-          <div className="divide-y divide-slate-50">
-            {groups.map(g => {
-              const isAssigned = assignedGroupIds.has(g.id)
-              return (
-                <div key={g.id} className="px-6 py-4 flex items-center gap-4">
-                  <input type="checkbox" checked={isAssigned}
-                    onChange={() => toggleAssign(g.id)}
-                    className="accent-blue-600 w-4 h-4 shrink-0" />
-                  <span className="text-sm font-medium text-slate-800 w-32 shrink-0">{g.name}</span>
-                  <div className="flex items-center gap-2 flex-1">
-                    <input type="datetime-local"
-                      value={assignDates[g.id]?.from ?? ''}
-                      onChange={e => setAssignDates(d => ({ ...d, [g.id]: { ...d[g.id], from: e.target.value } }))}
-                      className="text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                    <span className="text-slate-400 text-xs">—</span>
-                    <input type="datetime-local"
-                      value={assignDates[g.id]?.to ?? ''}
-                      onChange={e => setAssignDates(d => ({ ...d, [g.id]: { ...d[g.id], to: e.target.value } }))}
-                      className="text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                  </div>
-                  {isAssigned && <span className="text-xs text-emerald-600 shrink-0">Выдан</span>}
+
+          {/* Секция: персонально студенту */}
+          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h3 className="text-sm font-semibold text-slate-700">Персонально студенту</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Переопределяет групповое назначение для конкретного студента</p>
+            </div>
+
+            {/* Форма нового персонального назначения */}
+            {allowedGroupIds.size > 0 && (
+              <div className="px-6 py-4 border-b border-slate-50 flex flex-wrap items-end gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-400">Группа</label>
+                  <select
+                    value={newStudentAssign.groupId ?? ''}
+                    onChange={e => setNewStudentAssign(s => ({ ...s, groupId: Number(e.target.value), studentId: null }))}
+                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  >
+                    <option value="">Выберите группу</option>
+                    {groups.filter(g => allowedGroupIds.has(g.id)).map(g => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
                 </div>
-              )
-            })}
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-400">Студент</label>
+                  <select
+                    value={newStudentAssign.studentId ?? ''}
+                    onChange={e => setNewStudentAssign(s => ({ ...s, studentId: Number(e.target.value) }))}
+                    disabled={!newStudentAssign.groupId}
+                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:opacity-50"
+                  >
+                    <option value="">Выберите студента</option>
+                    {(newStudentAssign.groupId ? groupStudents[newStudentAssign.groupId] ?? [] : []).map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.last_name} {s.first_name}{s.middle_name ? ` ${s.middle_name}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-400">Доступен с</label>
+                  <input type="datetime-local"
+                    value={newStudentAssign.from}
+                    onChange={e => setNewStudentAssign(s => ({ ...s, from: e.target.value }))}
+                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-400">Доступен до</label>
+                  <input type="datetime-local"
+                    value={newStudentAssign.to}
+                    onChange={e => setNewStudentAssign(s => ({ ...s, to: e.target.value }))}
+                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                </div>
+                <button
+                  onClick={assignToStudent}
+                  disabled={!newStudentAssign.groupId || !newStudentAssign.studentId || assigningStudent}
+                  className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  {assigningStudent ? 'Выдача...' : 'Выдать'}
+                </button>
+              </div>
+            )}
+
+            {/* Список персональных назначений */}
+            {studentAssignments.length === 0 ? (
+              <div className="px-6 py-5 text-center text-slate-400 text-sm">Персональных назначений нет</div>
+            ) : (
+              <div className="divide-y divide-slate-50">
+                {studentAssignments.map(sa => {
+                  const grp = groups.find(g => g.id === sa.group_id)
+                  const students = groupStudents[sa.group_id] ?? []
+                  const st = students.find(s => s.id === sa.student_id)
+                  const stName = st
+                    ? `${st.last_name} ${st.first_name}${st.middle_name ? ` ${st.middle_name}` : ''}`
+                    : `Студент #${sa.student_id}`
+                  return (
+                    <div key={sa.id} className="px-6 py-3 flex items-center gap-4 text-sm">
+                      <div className="flex-1">
+                        <span className="font-medium text-slate-800">{stName}</span>
+                        <span className="text-xs text-slate-400 ml-2">{grp?.name ?? `Группа ${sa.group_id}`}</span>
+                        {(sa.available_from || sa.available_to) && (
+                          <span className="text-xs text-slate-400 ml-2">
+                            {sa.available_from ? new Date(sa.available_from).toLocaleDateString('ru') : ''}
+                            {sa.available_from && sa.available_to ? ' — ' : ''}
+                            {sa.available_to ? new Date(sa.available_to).toLocaleDateString('ru') : ''}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={async () => {
+                          await client.delete(`/tests/${testId}/assignments/${sa.id}`)
+                          setAssignments(a => a.filter(x => x.id !== sa.id))
+                        }}
+                        className="text-xs text-red-400 hover:text-red-600"
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
+
         </div>
       )}
 

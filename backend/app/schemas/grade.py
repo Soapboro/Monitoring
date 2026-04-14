@@ -15,6 +15,7 @@ class GradeCreate(BaseModel):
 
 
 class GradeUpdate(BaseModel):
+    grade_type: GradeType | None = None
     value: float | None = None
     passed: bool | None = None
     comment: str | None = None
