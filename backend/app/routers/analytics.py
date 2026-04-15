@@ -1,18 +1,22 @@
 from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case, and_
+from sqlalchemy import select, func, case, and_, extract, cast, Float
 
 from app.database import get_db
 from app.models.grade import Grade, GradeType
 from app.models.attendance import Attendance
 from app.models.test_session import TestSession, SessionStatus
-from app.models.test import Test, TestAssignment as TestAssign
+from app.models.test import Test, TestAssignment as TestAssign, TestQuestion
+from app.models.question import Question
+from app.models.topic import Topic
+from app.models.teacher import Teacher
 from app.models.student import Student
 from app.models.group import Group
 from app.models.teaching_assignment import TeachingAssignment
 from app.models.subject import Subject
 from app.models.user import User
+from app.models.test_session import QuestionAnswer
 from app.dependencies import require_teacher, get_current_user
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -55,26 +59,25 @@ async def group_summary(
     result = await db.execute(query)
     rows = result.mappings().all()
 
-    # Количество выданных тестов по предметам для этой группы
-    total_q = (
-        select(
-            Test.subject_id,
-            func.count(func.distinct(TestAssign.test_id)).label("tests_total"),
-        )
+    # Размер группы (все студенты) — знаменатель "выдано"
+    group_size_q = select(func.count(Student.id)).where(Student.group_id == group_id)
+    group_size = (await db.execute(group_size_q)).scalar() or 0
+
+    # Предметы, по которым вообще есть выданные тесты для группы
+    has_tests_q = (
+        select(func.distinct(Test.subject_id))
         .join(Test, TestAssign.test_id == Test.id)
         .where(TestAssign.group_id == group_id)
-        .group_by(Test.subject_id)
     )
-    total_map = {
-        r["subject_id"]: r["tests_total"]
-        for r in (await db.execute(total_q)).mappings().all()
+    subjects_with_tests = {
+        r[0] for r in (await db.execute(has_tests_q)).all()
     }
 
-    # Количество успешно пройденных сессий по предметам для студентов группы
+    # Количество уникальных студентов, сдавших хотя бы один тест по предмету
     passed_q = (
         select(
             Test.subject_id,
-            func.count(TestSession.id).label("tests_passed"),
+            func.count(func.distinct(TestSession.student_id)).label("tests_passed"),
         )
         .join(Test, TestSession.test_id == Test.id)
         .join(Student, TestSession.student_id == Student.id)
@@ -94,7 +97,8 @@ async def group_summary(
     for r in rows:
         row = dict(r)
         sid = row.pop("subject_id")
-        row["tests_total"] = total_map.get(sid, 0)
+        # tests_total: размер группы (если по предмету есть тесты), иначе 0
+        row["tests_total"] = group_size if sid in subjects_with_tests else 0
         row["tests_passed"] = passed_map.get(sid, 0)
         out.append(row)
     return out
@@ -336,6 +340,180 @@ async def rating_by_subjects(
         .where(Grade.value.isnot(None))
         .group_by(Subject.id, Subject.name)
         .order_by(func.avg(Grade.value).desc())
+    )
+    result = await db.execute(query)
+    rows = result.mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.get("/question-stats")
+async def question_stats(
+    test_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_teacher),
+):
+    """Статистика по вопросам теста: частота ошибок, среднее время."""
+    query = (
+        select(
+            TestQuestion.id.label("test_question_id"),
+            TestQuestion.order_index,
+            Question.id.label("question_id"),
+            Question.text.label("question_text"),
+            Question.question_type,
+            Topic.name.label("topic"),
+            func.count(QuestionAnswer.id).label("attempts"),
+            func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)).label("correct_count"),
+            func.round(
+                cast(
+                    func.sum(case((QuestionAnswer.is_correct == False, 1), else_=0)), Float
+                ) / func.nullif(func.count(QuestionAnswer.id), 0) * 100,
+                1
+            ).label("error_rate_pct"),
+            func.round(func.avg(QuestionAnswer.time_spent_sec), 1).label("avg_time_sec"),
+        )
+        .join(TestQuestion, QuestionAnswer.test_question_id == TestQuestion.id)
+        .join(Question, TestQuestion.question_id == Question.id)
+        .outerjoin(Topic, Question.topic_id == Topic.id)
+        .join(TestSession, QuestionAnswer.session_id == TestSession.id)
+        .where(
+            TestQuestion.test_id == test_id,
+            TestSession.status == SessionStatus.completed,
+        )
+        .group_by(
+            TestQuestion.id, TestQuestion.order_index,
+            Question.id, Question.text, Question.question_type,
+            Topic.name,
+        )
+        .order_by(TestQuestion.order_index)
+    )
+    result = await db.execute(query)
+    rows = result.mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.get("/test-durations")
+async def test_durations(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_teacher),
+):
+    """Среднее/мин/макс время прохождения тестов преподавателя."""
+    teacher_q = select(Teacher.id).where(Teacher.user_id == current_user.id)
+    teacher_id = (await db.execute(teacher_q)).scalar_one_or_none()
+    if teacher_id is None:
+        return []
+
+    query = (
+        select(
+            Test.id.label("test_id"),
+            Test.title,
+            Subject.name.label("subject"),
+            func.count(TestSession.id).label("attempts"),
+            func.round(func.avg(
+                extract("epoch", TestSession.finished_at) - extract("epoch", TestSession.started_at)
+            ), 0).label("avg_duration_sec"),
+            func.min(
+                extract("epoch", TestSession.finished_at) - extract("epoch", TestSession.started_at)
+            ).label("min_duration_sec"),
+            func.max(
+                extract("epoch", TestSession.finished_at) - extract("epoch", TestSession.started_at)
+            ).label("max_duration_sec"),
+        )
+        .join(TestSession, TestSession.test_id == Test.id)
+        .join(Subject, Test.subject_id == Subject.id)
+        .where(
+            Test.teacher_id == teacher_id,
+            TestSession.status == SessionStatus.completed,
+            TestSession.finished_at.isnot(None),
+            TestSession.started_at.isnot(None),
+        )
+        .group_by(Test.id, Test.title, Subject.name)
+        .order_by(func.avg(
+            extract("epoch", TestSession.finished_at) - extract("epoch", TestSession.started_at)
+        ).desc())
+    )
+    result = await db.execute(query)
+    rows = result.mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.get("/topic-mastery")
+async def topic_mastery(
+    group_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_teacher),
+):
+    """Освоенность тем группой: процент правильных ответов по каждой теме."""
+    query = (
+        select(
+            Topic.id.label("topic_id"),
+            Topic.name.label("topic"),
+            func.count(QuestionAnswer.id).label("attempts"),
+            func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)).label("correct_count"),
+            func.round(
+                cast(
+                    func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Float
+                ) / func.nullif(func.count(QuestionAnswer.id), 0) * 100,
+                1
+            ).label("correct_pct"),
+        )
+        .join(TestQuestion, QuestionAnswer.test_question_id == TestQuestion.id)
+        .join(Question, TestQuestion.question_id == Question.id)
+        .join(Topic, Question.topic_id == Topic.id)
+        .join(TestSession, QuestionAnswer.session_id == TestSession.id)
+        .join(Student, TestSession.student_id == Student.id)
+        .where(
+            Student.group_id == group_id,
+            TestSession.status == SessionStatus.completed,
+        )
+        .group_by(Topic.id, Topic.name)
+        .order_by(func.round(
+            cast(func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Float)
+            / func.nullif(func.count(QuestionAnswer.id), 0) * 100, 1
+        ))
+    )
+    result = await db.execute(query)
+    rows = result.mappings().all()
+    return [dict(r) for r in rows]
+
+
+@router.get("/student-weaknesses")
+async def student_weaknesses(
+    group_id: int,
+    min_attempts: int = Query(2, ge=1),
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_teacher),
+):
+    """По каждому студенту группы — проблемные темы (низкий % правильных ответов)."""
+    query = (
+        select(
+            Student.id.label("student_id"),
+            (Student.last_name + " " + Student.first_name).label("student_name"),
+            Topic.id.label("topic_id"),
+            Topic.name.label("topic"),
+            func.count(QuestionAnswer.id).label("attempts"),
+            func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)).label("correct_count"),
+            func.round(
+                cast(
+                    func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Float
+                ) / func.nullif(func.count(QuestionAnswer.id), 0) * 100,
+                1
+            ).label("correct_pct"),
+        )
+        .join(TestSession, QuestionAnswer.session_id == TestSession.id)
+        .join(Student, TestSession.student_id == Student.id)
+        .join(TestQuestion, QuestionAnswer.test_question_id == TestQuestion.id)
+        .join(Question, TestQuestion.question_id == Question.id)
+        .join(Topic, Question.topic_id == Topic.id)
+        .where(
+            Student.group_id == group_id,
+            TestSession.status == SessionStatus.completed,
+        )
+        .group_by(Student.id, Student.last_name, Student.first_name, Topic.id, Topic.name)
+        .having(func.count(QuestionAnswer.id) >= min_attempts)
+        .order_by(Student.last_name, Student.first_name, func.round(
+            cast(func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Float)
+            / func.nullif(func.count(QuestionAnswer.id), 0) * 100, 1
+        ))
     )
     result = await db.execute(query)
     rows = result.mappings().all()

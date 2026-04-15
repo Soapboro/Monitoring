@@ -6,7 +6,16 @@ import {
 } from '../../api/resources'
 import { getAllAssignments } from '../../api/resources'
 import type { Lesson } from '../../api/resources'
-import { Overlay, Field, ConfirmDelete } from '../../components/CrudHelpers'
+import {
+  Box, Paper, Typography, CircularProgress, Chip,
+  Select, MenuItem, Button, IconButton,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, Alert,
+} from '@mui/material'
+import {
+  ChevronLeftRounded, ChevronRightRounded,
+  EditRounded, DeleteOutlineRounded, AddRounded, PlaceRounded,
+} from '@mui/icons-material'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -17,12 +26,12 @@ const LESSON_TYPE_LABELS: Record<LessonType, string> = {
   seminar: 'Семинар',
   other: 'Другое',
 }
-const LESSON_TYPE_COLORS: Record<LessonType, string> = {
-  lecture: 'bg-blue-100 text-blue-700',
-  practice: 'bg-emerald-100 text-emerald-700',
-  lab: 'bg-purple-100 text-purple-700',
-  seminar: 'bg-amber-100 text-amber-700',
-  other: 'bg-slate-100 text-slate-600',
+const LESSON_TYPE_SX: Record<LessonType, { bgcolor: string; color: string }> = {
+  lecture:  { bgcolor: '#DBEAFE', color: '#1D4ED8' },
+  practice: { bgcolor: '#D1FAE5', color: '#065F46' },
+  lab:      { bgcolor: '#EDE9FE', color: '#6D28D9' },
+  seminar:  { bgcolor: '#FEF3C7', color: '#92400E' },
+  other:    { bgcolor: '#F1F5F9', color: '#64748b' },
 }
 const WEEKDAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 
@@ -37,13 +46,9 @@ function startOfWeek(d: Date): Date {
   return r
 }
 function addDays(d: Date, n: number): Date {
-  const r = new Date(d)
-  r.setDate(r.getDate() + n)
-  return r
+  const r = new Date(d); r.setDate(r.getDate() + n); return r
 }
-function formatDate(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
+function formatDate(d: Date): string { return d.toISOString().slice(0, 10) }
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
 }
@@ -68,8 +73,7 @@ export default function SchedulePage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editLesson, setEditLesson] = useState<Lesson | null>(null)
   const [deleteId, setDeleteId] = useState<number | null>(null)
-
-  // ── Lookups ──────────────────────────────────────────────────────────────────
+  const [deleting, setDeleting] = useState(false)
 
   const subjectName = (id: number) => subjects.find(s => s.id === id)?.name ?? '—'
   const groupName = (id: number) => groups.find(g => g.id === id)?.name ?? '—'
@@ -78,8 +82,6 @@ export default function SchedulePage() {
     return t ? `${t.last_name} ${t.first_name[0]}.${t.middle_name ? t.middle_name[0] + '.' : ''}` : '—'
   }
   const assignmentInfo = (aId: number) => assignments.find(a => a.id === aId)
-
-  // ── Load ─────────────────────────────────────────────────────────────────────
 
   const loadLessons = useCallback(async () => {
     setLoading(true)
@@ -90,34 +92,21 @@ export default function SchedulePage() {
       if (teacherFilter !== 'all') params.teacher_id = teacherFilter
       const ls = await getLessons(params as Parameters<typeof getLessons>[0])
       setLessons(ls)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }, [weekStart, teacherFilter])
 
   useEffect(() => {
-    // Load static data once
     Promise.all([getTeachers(), getGroups(), getSubjects(), getAllAssignments()])
-      .then(([ts, gs, ss, as]) => {
-        setTeachers(ts)
-        setGroups(gs)
-        setSubjects(ss)
-        setAssignments(as)
-      })
+      .then(([ts, gs, ss, as]) => { setTeachers(ts); setGroups(gs); setSubjects(ss); setAssignments(as) })
   }, [])
 
   useEffect(() => { loadLessons() }, [loadLessons])
-
-  // ── Derived data ─────────────────────────────────────────────────────────────
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
   const visibleLessons = groupFilter === 'all'
     ? lessons
-    : lessons.filter(l => {
-        const a = assignmentInfo(l.assignment_id)
-        return a?.group_id === parseInt(groupFilter)
-      })
+    : lessons.filter(l => assignmentInfo(l.assignment_id)?.group_id === parseInt(groupFilter))
 
   const lessonsByDay = (day: Date) => {
     const dateStr = formatDate(day)
@@ -132,175 +121,162 @@ export default function SchedulePage() {
     return `${fmt(weekStart)} — ${fmt(end)}`
   }
 
-  // ── Stats ─────────────────────────────────────────────────────────────────────
-  const totalThisWeek = visibleLessons.length
-
-  // ── Handlers ─────────────────────────────────────────────────────────────────
-
   const handleDelete = async () => {
     if (deleteId === null) return
-    await deleteLesson(deleteId)
-    setDeleteId(null)
-    loadLessons()
+    setDeleting(true)
+    try { await deleteLesson(deleteId); setDeleteId(null); loadLessons() }
+    finally { setDeleting(false) }
   }
 
   return (
-    <div className="p-8 max-w-7xl">
+    <Box sx={{ p: 4, maxWidth: 1300 }}>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-800 mb-0.5">Расписание занятий</h1>
-          <p className="text-slate-400 text-sm">{weekLabel()} · {totalThisWeek} занятий</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          {/* Filters */}
-          <select
-            value={teacherFilter}
-            onChange={e => setTeacherFilter(e.target.value)}
-            className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+        <Box>
+          <Typography variant="h5" fontWeight={700}>Расписание занятий</Typography>
+          <Typography variant="body2" color="text.secondary">{weekLabel()} · {visibleLessons.length} занятий</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Select
+            size="small" value={teacherFilter} onChange={e => setTeacherFilter(e.target.value)}
+            sx={{ minWidth: 180, fontSize: 14 }}
           >
-            <option value="all">Все преподаватели</option>
+            <MenuItem value="all">Все преподаватели</MenuItem>
             {teachers.map(t => (
-              <option key={t.id} value={String(t.id)}>
-                {t.last_name} {t.first_name[0]}. {t.middle_name ? t.middle_name[0] + '.' : ''}
-              </option>
+              <MenuItem key={t.id} value={String(t.id)}>
+                {t.last_name} {t.first_name[0]}.{t.middle_name ? t.middle_name[0] + '.' : ''}
+              </MenuItem>
             ))}
-          </select>
-          <select
-            value={groupFilter}
-            onChange={e => setGroupFilter(e.target.value)}
-            className="px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          </Select>
+          <Select
+            size="small" value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
+            sx={{ minWidth: 140, fontSize: 14 }}
           >
-            <option value="all">Все группы</option>
+            <MenuItem value="all">Все группы</MenuItem>
             {groups.filter(g => g.is_active).map(g => (
-              <option key={g.id} value={String(g.id)}>{g.name}</option>
+              <MenuItem key={g.id} value={String(g.id)}>{g.name}</MenuItem>
             ))}
-          </select>
+          </Select>
 
-          {/* Week nav */}
-          <button
-            onClick={() => setWeekStart(w => addDays(w, -7))}
-            className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-600"
-          >
-            <ChevronLeft />
-          </button>
-          <button
-            onClick={() => setWeekStart(startOfWeek(new Date()))}
-            className="px-3 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors text-slate-600"
-          >
+          <IconButton size="small" onClick={() => setWeekStart(w => addDays(w, -7))} sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}>
+            <ChevronLeftRounded fontSize="small" />
+          </IconButton>
+          <Button size="small" variant="outlined" onClick={() => setWeekStart(startOfWeek(new Date()))} sx={{ borderColor: 'divider', color: 'text.primary', minWidth: 80 }}>
             Сегодня
-          </button>
-          <button
-            onClick={() => setWeekStart(w => addDays(w, 7))}
-            className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors text-slate-600"
-          >
-            <ChevronRight />
-          </button>
+          </Button>
+          <IconButton size="small" onClick={() => setWeekStart(w => addDays(w, 7))} sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}>
+            <ChevronRightRounded fontSize="small" />
+          </IconButton>
 
-          <button
-            onClick={() => setCreateOpen(true)}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium"
-          >
-            + Занятие
-          </button>
-        </div>
-      </div>
+          <Button variant="contained" size="small" startIcon={<AddRounded />} onClick={() => setCreateOpen(true)}>
+            Занятие
+          </Button>
+        </Box>
+      </Box>
 
       {/* Calendar grid */}
-      {loading ? <Spinner /> : (
-        <div className="grid grid-cols-7 gap-3">
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+      ) : (
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1.5 }}>
           {weekDays.map((day, i) => {
             const isToday = formatDate(day) === formatDate(new Date())
             const dayLessons = lessonsByDay(day)
             return (
-              <div key={i} className="min-h-48">
+              <Box key={i} sx={{ minHeight: 192 }}>
                 {/* Day header */}
-                <div className={`text-center mb-2 pb-2 border-b ${isToday ? 'border-blue-400' : 'border-slate-200'}`}>
-                  <p className={`text-xs font-medium ${isToday ? 'text-blue-600' : 'text-slate-400'}`}>
+                <Box sx={{ textAlign: 'center', mb: 1.5, pb: 1.5, borderBottom: 2, borderColor: isToday ? '#60A5FA' : 'divider' }}>
+                  <Typography variant="caption" fontWeight={500} sx={{ color: isToday ? '#1D4ED8' : 'text.disabled', display: 'block' }}>
                     {WEEKDAY_SHORT[i]}
-                  </p>
-                  <p className={`text-lg font-semibold ${isToday ? 'text-blue-600' : 'text-slate-700'}`}>
+                  </Typography>
+                  <Typography variant="h6" fontWeight={600} sx={{ color: isToday ? '#1D4ED8' : 'text.primary', lineHeight: 1.2 }}>
                     {day.getDate()}
-                  </p>
+                  </Typography>
                   {dayLessons.length > 0 && (
-                    <p className="text-xs text-slate-400">{dayLessons.length} зан.</p>
+                    <Typography variant="caption" color="text.disabled">{dayLessons.length} зан.</Typography>
                   )}
-                </div>
+                </Box>
 
                 {/* Lessons */}
-                <div className="space-y-2">
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   {dayLessons.map(lesson => {
                     const assign = assignmentInfo(lesson.assignment_id)
                     return (
-                      <div
+                      <Paper
                         key={lesson.id}
-                        className="bg-white rounded-lg border border-slate-100 shadow-sm p-2.5 hover:border-slate-300 hover:shadow-md transition-all group"
+                        elevation={1}
+                        sx={{
+                          p: 1.25, position: 'relative', overflow: 'hidden',
+                          '&:hover .lesson-actions': { opacity: 1 },
+                          '&:hover': { boxShadow: 3 },
+                          transition: 'box-shadow 0.15s',
+                        }}
                       >
-                        <p className="text-xs font-semibold text-slate-700 leading-tight mb-1">
+                        <Typography variant="caption" fontWeight={700} sx={{ display: 'block', mb: 0.5 }}>
                           {fmtTime(lesson.starts_at)}–{fmtTime(lesson.ends_at)}
-                        </p>
+                        </Typography>
                         {assign && (
                           <>
-                            <p className="text-xs text-slate-600 font-medium truncate mb-0.5">
+                            <Typography variant="caption" fontWeight={500} sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {subjectName(assign.subject_id)}
-                            </p>
-                            <p className="text-xs text-slate-400 truncate mb-0.5">{groupName(assign.group_id)}</p>
-                            <p className="text-xs text-slate-400 truncate">{teacherName(assign.teacher_id)}</p>
+                            </Typography>
+                            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {groupName(assign.group_id)}
+                            </Typography>
+                            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {teacherName(assign.teacher_id)}
+                            </Typography>
                           </>
                         )}
                         {lesson.topic && (
-                          <p className="text-xs text-slate-400 italic truncate mt-0.5">{lesson.topic}</p>
+                          <Typography variant="caption" sx={{ display: 'block', fontStyle: 'italic', color: 'text.disabled', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', mt: 0.25 }}>
+                            {lesson.topic}
+                          </Typography>
                         )}
-                        <div className="flex items-center justify-between mt-1.5">
-                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${LESSON_TYPE_COLORS[lesson.lesson_type]}`}>
-                            {LESSON_TYPE_LABELS[lesson.lesson_type]}
-                          </span>
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={() => setEditLesson(lesson)}
-                              className="p-0.5 text-slate-400 hover:text-blue-500 transition-colors"
-                              title="Редактировать"
-                            >
-                              <PencilMini />
-                            </button>
-                            <button
-                              onClick={() => setDeleteId(lesson.id)}
-                              className="p-0.5 text-slate-400 hover:text-red-500 transition-colors"
-                              title="Удалить"
-                            >
-                              <TrashMini />
-                            </button>
-                          </div>
-                        </div>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.75 }}>
+                          <Chip label={LESSON_TYPE_LABELS[lesson.lesson_type]} size="small" sx={{ ...LESSON_TYPE_SX[lesson.lesson_type], height: 18, fontSize: 10, fontWeight: 600 }} />
+                          <Box className="lesson-actions" sx={{ display: 'flex', gap: 0.25, opacity: 0, transition: 'opacity 0.15s' }}>
+                            <IconButton size="small" sx={{ p: 0.25, color: 'text.disabled', '&:hover': { color: 'primary.main' } }} onClick={() => setEditLesson(lesson)}>
+                              <EditRounded sx={{ fontSize: 13 }} />
+                            </IconButton>
+                            <IconButton size="small" sx={{ p: 0.25, color: 'text.disabled', '&:hover': { color: 'error.main' } }} onClick={() => setDeleteId(lesson.id)}>
+                              <DeleteOutlineRounded sx={{ fontSize: 13 }} />
+                            </IconButton>
+                          </Box>
+                        </Box>
                         {lesson.room && (
-                          <p className="text-xs text-slate-400 mt-0.5">📍 {lesson.room}</p>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, mt: 0.25 }}>
+                            <PlaceRounded sx={{ fontSize: 11, color: 'text.disabled' }} />
+                            <Typography variant="caption" color="text.disabled">{lesson.room}</Typography>
+                          </Box>
                         )}
-                      </div>
+                      </Paper>
                     )
                   })}
                   {dayLessons.length === 0 && (
-                    <p className="text-xs text-slate-300 text-center pt-4">—</p>
+                    <Typography variant="caption" color="text.disabled" sx={{ textAlign: 'center', pt: 3, display: 'block' }}>—</Typography>
                   )}
-                </div>
-              </div>
+                </Box>
+              </Box>
             )
           })}
-        </div>
+        </Box>
       )}
 
-      {/* Modals */}
+      {/* Create modal */}
       {createOpen && (
         <LessonFormModal
           teachers={teachers}
           assignments={assignments}
           subjects={subjects}
           groups={groups}
-          title="Новое занятие"
           defaultDate={formatDate(new Date())}
           onClose={() => setCreateOpen(false)}
           onSave={() => { setCreateOpen(false); loadLessons() }}
         />
       )}
+
+      {/* Edit modal */}
       {editLesson && (
         <EditLessonModal
           lesson={editLesson}
@@ -308,25 +284,33 @@ export default function SchedulePage() {
           onSave={() => { setEditLesson(null); loadLessons() }}
         />
       )}
-      {deleteId !== null && (
-        <ConfirmDelete
-          text="Удалить это занятие из расписания? Записи о посещаемости не удалятся."
-          onConfirm={handleDelete}
-          onCancel={() => setDeleteId(null)}
-        />
-      )}
-    </div>
+
+      {/* Confirm delete */}
+      <Dialog open={deleteId !== null} onClose={() => setDeleteId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Удалить занятие?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Удалить это занятие из расписания? Записи о посещаемости не удалятся.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setDeleteId(null)}>Отмена</Button>
+          <Button variant="contained" color="error" disabled={deleting} onClick={handleDelete}>
+            {deleting ? 'Удаление...' : 'Удалить'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   )
 }
 
 // ── Create modal ───────────────────────────────────────────────────────────────
 
-function LessonFormModal({ teachers, assignments, subjects, groups, title, defaultDate, onClose, onSave }: {
+function LessonFormModal({ teachers, assignments, subjects, groups, defaultDate, onClose, onSave }: {
   teachers: TeacherProfile[]
   assignments: TeachingAssignment[]
   subjects: Subject[]
   groups: Group[]
-  title: string
   defaultDate: string
   onClose: () => void
   onSave: () => void
@@ -342,10 +326,7 @@ function LessonFormModal({ teachers, assignments, subjects, groups, title, defau
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const teacherAssignments = assignments.filter(
-    a => teacherId ? a.teacher_id === parseInt(teacherId) : false
-  )
-
+  const teacherAssignments = assignments.filter(a => teacherId ? a.teacher_id === parseInt(teacherId) : false)
   const subjectName = (id: number) => subjects.find(s => s.id === id)?.name ?? '—'
   const groupName = (id: number) => groups.find(g => g.id === id)?.name ?? '—'
 
@@ -355,15 +336,12 @@ function LessonFormModal({ teachers, assignments, subjects, groups, title, defau
     if (!date) { setError('Укажите дату'); return }
     if (!timeStart || !timeEnd) { setError('Укажите время'); return }
     if (timeEnd <= timeStart) { setError('Время окончания должно быть позже начала'); return }
-    setSaving(true)
-    setError('')
+    setSaving(true); setError('')
     try {
-      const starts_at = new Date(`${date}T${timeStart}`).toISOString()
-      const ends_at = new Date(`${date}T${timeEnd}`).toISOString()
       await createLesson({
         assignment_id: parseInt(assignmentId),
-        starts_at,
-        ends_at,
+        starts_at: new Date(`${date}T${timeStart}`).toISOString(),
+        ends_at: new Date(`${date}T${timeEnd}`).toISOString(),
         topic: topic.trim() || undefined,
         lesson_type: lessonType,
         room: room.trim() || undefined,
@@ -377,125 +355,83 @@ function LessonFormModal({ teachers, assignments, subjects, groups, title, defau
   }
 
   return (
-    <Overlay onClose={onClose}>
-      <h2 className="text-lg font-semibold text-slate-800 mb-5">{title}</h2>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Новое занятие</DialogTitle>
+      <DialogContent>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          <TextField
+            select label="Преподаватель" fullWidth size="small" value={teacherId}
+            onChange={e => { setTeacherId(e.target.value); setAssignmentId('') }}
+          >
+            <MenuItem value=""><em>— выберите —</em></MenuItem>
+            {teachers.map(t => (
+              <MenuItem key={t.id} value={String(t.id)}>{t.last_name} {t.first_name} {t.middle_name ?? ''}</MenuItem>
+            ))}
+          </TextField>
 
-      <Field label="Преподаватель">
-        <select
-          value={teacherId}
-          onChange={e => { setTeacherId(e.target.value); setAssignmentId('') }}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">— выберите —</option>
-          {teachers.map(t => (
-            <option key={t.id} value={String(t.id)}>
-              {t.last_name} {t.first_name} {t.middle_name ?? ''}
-            </option>
-          ))}
-        </select>
-      </Field>
+          <Box>
+            <TextField
+              select label="Дисциплина / группа" fullWidth size="small" value={assignmentId}
+              onChange={e => setAssignmentId(e.target.value)}
+              disabled={!teacherId}
+            >
+              <MenuItem value=""><em>— выберите —</em></MenuItem>
+              {teacherAssignments.map(a => (
+                <MenuItem key={a.id} value={String(a.id)}>
+                  {subjectName(a.subject_id)} · {groupName(a.group_id)} ({a.acad_year}, сем. {a.semester})
+                </MenuItem>
+              ))}
+            </TextField>
+            {teacherId && teacherAssignments.length === 0 && (
+              <Typography variant="caption" sx={{ color: '#92400E', mt: 0.5, display: 'block' }}>
+                Нет назначений у этого преподавателя
+              </Typography>
+            )}
+          </Box>
 
-      <Field label="Дисциплина / группа">
-        <select
-          value={assignmentId}
-          onChange={e => setAssignmentId(e.target.value)}
-          disabled={!teacherId}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 disabled:text-slate-400"
-        >
-          <option value="">— выберите —</option>
-          {teacherAssignments.map(a => (
-            <option key={a.id} value={String(a.id)}>
-              {subjectName(a.subject_id)} · {groupName(a.group_id)} ({a.acad_year}, сем. {a.semester})
-            </option>
-          ))}
-        </select>
-        {teacherId && teacherAssignments.length === 0 && (
-          <p className="text-xs text-amber-500 mt-1">Нет назначений у этого преподавателя</p>
-        )}
-      </Field>
-
-      <Field label="Дата">
-        <input
-          type="date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </Field>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Начало">
-          <input
-            type="time"
-            value={timeStart}
-            onChange={e => setTimeStart(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <TextField
+            label="Дата" type="date" fullWidth size="small" value={date}
+            onChange={e => setDate(e.target.value)}
+            InputLabelProps={{ shrink: true }}
           />
-        </Field>
-        <Field label="Конец">
-          <input
-            type="time"
-            value={timeEnd}
-            onChange={e => setTimeEnd(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </Field>
-      </div>
 
-      <Field label="Тип занятия">
-        <select
-          value={lessonType}
-          onChange={e => setLessonType(e.target.value as LessonType)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {(Object.entries(LESSON_TYPE_LABELS) as [LessonType, string][]).map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
-          ))}
-        </select>
-      </Field>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <TextField label="Начало" type="time" size="small" value={timeStart}
+              onChange={e => setTimeStart(e.target.value)} InputLabelProps={{ shrink: true }} />
+            <TextField label="Конец" type="time" size="small" value={timeEnd}
+              onChange={e => setTimeEnd(e.target.value)} InputLabelProps={{ shrink: true }} />
+          </Box>
 
-      <Field label="Тема (необязательно)">
-        <input
-          value={topic}
-          onChange={e => setTopic(e.target.value)}
-          placeholder="Тема занятия"
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </Field>
+          <TextField select label="Тип занятия" fullWidth size="small" value={lessonType}
+            onChange={e => setLessonType(e.target.value as LessonType)}>
+            {(Object.entries(LESSON_TYPE_LABELS) as [LessonType, string][]).map(([v, l]) => (
+              <MenuItem key={v} value={v}>{l}</MenuItem>
+            ))}
+          </TextField>
 
-      <Field label="Аудитория (необязательно)">
-        <input
-          value={room}
-          onChange={e => setRoom(e.target.value)}
-          placeholder="А-205"
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </Field>
+          <TextField label="Тема (необязательно)" fullWidth size="small" value={topic}
+            onChange={e => setTopic(e.target.value)} placeholder="Тема занятия" />
 
-      {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
+          <TextField label="Аудитория (необязательно)" fullWidth size="small" value={room}
+            onChange={e => setRoom(e.target.value)} placeholder="А-205" />
 
-      <div className="flex justify-end gap-3 mt-2">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">
-          Отмена
-        </button>
-        <button
-          onClick={submit}
-          disabled={saving}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
+          {error && <Alert severity="error">{error}</Alert>}
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button color="inherit" onClick={onClose}>Отмена</Button>
+        <Button variant="contained" disabled={saving} onClick={submit}>
           {saving ? 'Создание...' : 'Создать'}
-        </button>
-      </div>
-    </Overlay>
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
 // ── Edit modal ─────────────────────────────────────────────────────────────────
 
 function EditLessonModal({ lesson, onClose, onSave }: {
-  lesson: Lesson
-  onClose: () => void
-  onSave: () => void
+  lesson: Lesson; onClose: () => void; onSave: () => void
 }) {
   const [date, setDate] = useState(lesson.starts_at.slice(0, 10))
   const [timeStart, setTimeStart] = useState(toLocalDT(lesson.starts_at).slice(11))
@@ -508,8 +444,7 @@ function EditLessonModal({ lesson, onClose, onSave }: {
 
   const submit = async () => {
     if (timeEnd <= timeStart) { setError('Время окончания должно быть позже начала'); return }
-    setSaving(true)
-    setError('')
+    setSaving(true); setError('')
     try {
       await updateLesson(lesson.id, {
         starts_at: new Date(`${date}T${timeStart}`).toISOString(),
@@ -527,85 +462,35 @@ function EditLessonModal({ lesson, onClose, onSave }: {
   }
 
   return (
-    <Overlay onClose={onClose}>
-      <h2 className="text-lg font-semibold text-slate-800 mb-5">Редактировать занятие</h2>
-
-      <Field label="Дата">
-        <input
-          type="date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Начало">
-          <input type="time" value={timeStart} onChange={e => setTimeStart(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </Field>
-        <Field label="Конец">
-          <input type="time" value={timeEnd} onChange={e => setTimeEnd(e.target.value)}
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-        </Field>
-      </div>
-      <Field label="Тип занятия">
-        <select value={lessonType} onChange={e => setLessonType(e.target.value as LessonType)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          {(Object.entries(LESSON_TYPE_LABELS) as [LessonType, string][]).map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Тема">
-        <input value={topic} onChange={e => setTopic(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </Field>
-      <Field label="Аудитория">
-        <input value={room} onChange={e => setRoom(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-      </Field>
-
-      {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
-      <div className="flex justify-end gap-3 mt-2">
-        <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">
-          Отмена
-        </button>
-        <button onClick={submit} disabled={saving}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Редактировать занятие</DialogTitle>
+      <DialogContent>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+          <TextField label="Дата" type="date" fullWidth size="small" value={date}
+            onChange={e => setDate(e.target.value)} InputLabelProps={{ shrink: true }} />
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <TextField label="Начало" type="time" size="small" value={timeStart}
+              onChange={e => setTimeStart(e.target.value)} InputLabelProps={{ shrink: true }} />
+            <TextField label="Конец" type="time" size="small" value={timeEnd}
+              onChange={e => setTimeEnd(e.target.value)} InputLabelProps={{ shrink: true }} />
+          </Box>
+          <TextField select label="Тип занятия" fullWidth size="small" value={lessonType}
+            onChange={e => setLessonType(e.target.value as LessonType)}>
+            {(Object.entries(LESSON_TYPE_LABELS) as [LessonType, string][]).map(([v, l]) => (
+              <MenuItem key={v} value={v}>{l}</MenuItem>
+            ))}
+          </TextField>
+          <TextField label="Тема" fullWidth size="small" value={topic} onChange={e => setTopic(e.target.value)} />
+          <TextField label="Аудитория" fullWidth size="small" value={room} onChange={e => setRoom(e.target.value)} />
+          {error && <Alert severity="error">{error}</Alert>}
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button color="inherit" onClick={onClose}>Отмена</Button>
+        <Button variant="contained" disabled={saving} onClick={submit}>
           {saving ? 'Сохранение...' : 'Сохранить'}
-        </button>
-      </div>
-    </Overlay>
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
-}
-
-// ── Icons ──────────────────────────────────────────────────────────────────────
-
-function ChevronLeft() {
-  return <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-  </svg>
-}
-function ChevronRight() {
-  return <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-  </svg>
-}
-function TrashMini() {
-  return <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4h6v3M4 7h16" />
-  </svg>
-}
-function PencilMini() {
-  return <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-      d="M15.232 5.232l3.536 3.536M9 13l6.5-6.5a2 2 0 012.828 2.828L11.828 15.828a2 2 0 01-1.414.586H8v-2.414A2 2 0 018.586 12.5z" />
-  </svg>
-}
-function Spinner() {
-  return <div className="p-8 flex items-center gap-3 text-slate-400">
-    <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-    Загрузка...
-  </div>
 }

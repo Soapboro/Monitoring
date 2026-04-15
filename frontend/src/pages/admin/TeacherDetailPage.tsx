@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import {
+  Box, Paper, Typography, Chip, CircularProgress, Breadcrumbs, Link,
+  Table, TableHead, TableBody, TableRow, TableCell,
+  Collapse, Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, MenuItem, Alert, IconButton,
+} from '@mui/material'
+import { ChevronRightRounded, DeleteOutlineRounded, AddRounded } from '@mui/icons-material'
 import client from '../../api/client'
 import type { TeacherProfile, TeachingAssignment, Subject, Group } from '../../api/resources'
 import { getSubjects, getGroups, createAssignment, deleteAssignment } from '../../api/resources'
-import { Overlay, Field, ConfirmDelete, TrashIcon } from '../../components/CrudHelpers'
+import { WARM } from '../../theme'
 
 interface Department { id: number; name: string }
-
 interface GroupAssignments {
   group: Group
   items: { assignment: TeachingAssignment; subject: Subject; deptName: string | null }[]
@@ -24,6 +30,7 @@ export default function TeacherDetailPage() {
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const load = async () => {
     if (!id) return
@@ -38,17 +45,12 @@ export default function TeacherDetailPage() {
       const groupIds = [...new Set(assignments.map(a => a.group_id))]
 
       const [subjects, grps] = await Promise.all([
-        Promise.all(subjectIds.map(sid =>
-          client.get<Subject>(`/subjects/${sid}`).then(r => r.data).catch(() => null)
-        )),
-        Promise.all(groupIds.map(gid =>
-          client.get<Group>(`/groups/${gid}`).then(r => r.data).catch(() => null)
-        )),
+        Promise.all(subjectIds.map(sid => client.get<Subject>(`/subjects/${sid}`).then(r => r.data).catch(() => null))),
+        Promise.all(groupIds.map(gid => client.get<Group>(`/groups/${gid}`).then(r => r.data).catch(() => null))),
       ])
 
       const subjectMap: Record<number, Subject> = {}
       for (const s of subjects) if (s) subjectMap[s.id] = s
-
       const groupMap: Record<number, Group> = {}
       for (const g of grps) if (g) groupMap[g.id] = g
 
@@ -64,157 +66,148 @@ export default function TeacherDetailPage() {
         const subj = subjectMap[a.subject_id]
         if (!grp || !subj) continue
         if (!byGroup[a.group_id]) byGroup[a.group_id] = { group: grp, items: [] }
-        byGroup[a.group_id].items.push({
-          assignment: a,
-          subject: subj,
-          deptName: subj.department_id ? (deptMap[subj.department_id] ?? null) : null,
-        })
+        byGroup[a.group_id].items.push({ assignment: a, subject: subj, deptName: subj.department_id ? (deptMap[subj.department_id] ?? null) : null })
       }
 
       const result = Object.values(byGroup).sort((a, b) => a.group.name.localeCompare(b.group.name))
       setGroups(result)
       if (result.length > 0 && expanded === null) setExpanded(result[0].group.id)
-    } catch {
-      // silent
-    }
+    } catch { /* silent */ }
   }
 
-  useEffect(() => {
-    load().finally(() => setLoading(false))
-  }, [id])
+  useEffect(() => { load().finally(() => setLoading(false)) }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleDelete = async () => {
     if (deleteId === null) return
-    await deleteAssignment(deleteId)
-    setDeleteId(null)
-    await load()
+    setDeleting(true)
+    try { await deleteAssignment(deleteId); setDeleteId(null); await load() }
+    finally { setDeleting(false) }
   }
 
-  if (loading) return <Spinner />
-  if (!teacher) return <div className="p-8 text-slate-400">Преподаватель не найден</div>
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+  if (!teacher) return <Typography sx={{ p: 4 }} color="text.secondary">Преподаватель не найден</Typography>
 
   const fullName = `${teacher.last_name} ${teacher.first_name}${teacher.middle_name ? ' ' + teacher.middle_name : ''}`
   const totalSubjects = groups.reduce((s, g) => s + g.items.length, 0)
 
   return (
-    <div className="p-8 max-w-5xl">
-      {/* Хлебные крошки */}
-      <nav className="flex items-center gap-1.5 text-sm text-slate-400 mb-6">
-        <button onClick={() => navigate('/teachers')} className="hover:text-blue-600 cursor-pointer transition-colors">
-          Преподаватели
-        </button>
-        <Chevron />
-        <span className="text-slate-600 font-medium">{teacher.last_name} {teacher.first_name}</span>
-      </nav>
+    <Box sx={{ p: 4, maxWidth: 900 }}>
+      <Breadcrumbs separator={<ChevronRightRounded sx={{ fontSize: 14 }} />} sx={{ mb: 3, fontSize: 13 }}>
+        <Link underline="hover" sx={{ cursor: 'pointer' }} color="inherit" onClick={() => navigate('/teachers')}>Преподаватели</Link>
+        <Typography fontSize={13} color="text.primary" fontWeight={500}>{teacher.last_name} {teacher.first_name}</Typography>
+      </Breadcrumbs>
 
-      {/* Шапка */}
-      <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm mb-6">
-        <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
-            <span className="text-lg font-semibold text-purple-600">{teacher.last_name[0]}</span>
-          </div>
-          <div className="flex-1">
-            <h1 className="text-xl font-semibold text-slate-800">{fullName}</h1>
-            <p className="text-slate-400 text-sm mt-0.5">{teacher.position ?? 'Должность не указана'}</p>
-          </div>
-        </div>
+      {/* Header */}
+      <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+          <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Typography variant="h6" fontWeight={700} sx={{ color: '#6D28D9' }}>{teacher.last_name[0]}</Typography>
+          </Box>
+          <Box>
+            <Typography variant="h6" fontWeight={600}>{fullName}</Typography>
+            <Typography variant="body2" color="text.secondary">{teacher.position ?? 'Должность не указана'}</Typography>
+          </Box>
+        </Box>
 
-        <div className="grid grid-cols-3 gap-4 mt-5 pt-5 border-t border-slate-100">
-          <Stat label="Групп" value={groups.length} />
-          <Stat label="Назначений" value={totalSubjects} />
-          <div>
-            <p className="text-xs text-slate-400">Телефон</p>
-            <p className="text-sm font-medium text-slate-700 mt-0.5">{teacher.phone ?? '—'}</p>
-          </div>
-        </div>
-      </div>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, mt: 2.5, pt: 2.5, borderTop: 1, borderColor: 'divider' }}>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Групп</Typography>
+            <Typography variant="h5" fontWeight={700} sx={{ color: WARM[800] }}>{groups.length}</Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Назначений</Typography>
+            <Typography variant="h5" fontWeight={700} sx={{ color: WARM[800] }}>{totalSubjects}</Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Телефон</Typography>
+            <Typography variant="body2" fontWeight={500} sx={{ mt: 0.5 }}>{teacher.phone ?? '—'}</Typography>
+          </Box>
+        </Box>
+      </Paper>
 
-      {/* Заголовок секции */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-base font-semibold text-slate-700">Преподаваемые предметы</h2>
-          <span className="text-xs text-slate-400">{groups.length} групп</span>
-        </div>
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
-        >
-          + Добавить назначение
-        </button>
-      </div>
+      {/* Assignments section header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+          <Typography variant="subtitle1" fontWeight={600}>Преподаваемые предметы</Typography>
+          <Typography variant="caption" color="text.disabled">{groups.length} групп</Typography>
+        </Box>
+        <Button variant="contained" size="small" startIcon={<AddRounded />} onClick={() => setShowAddModal(true)}>
+          Добавить назначение
+        </Button>
+      </Box>
 
       {groups.length === 0 ? (
-        <Empty text="Нет назначений" />
+        <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">Нет назначений</Typography></Paper>
       ) : (
-        <div className="space-y-2">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {groups.map(({ group, items }) => {
             const isOpen = expanded === group.id
             return (
-              <div key={group.id} className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-                <button
+              <Paper key={group.id} elevation={1} sx={{ overflow: 'hidden' }}>
+                <Box
+                  sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 2, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
                   onClick={() => setExpanded(isOpen ? null : group.id)}
-                  className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
-                    <svg className={`w-3.5 h-3.5 text-slate-400 transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                    <button
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                    <ChevronRightRounded sx={{ fontSize: 16, color: 'text.disabled', transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                    <Link
+                      underline="hover"
+                      sx={{ cursor: 'pointer', fontWeight: 500 }}
                       onClick={e => { e.stopPropagation(); navigate(`/groups/${group.id}`) }}
-                      className="font-medium text-blue-600 hover:underline text-sm cursor-pointer"
                     >
                       {group.name}
-                    </button>
-                    <span className="text-xs text-slate-400">набор {group.year_start}</span>
-                  </div>
-                  <span className="text-xs text-slate-400">{items.length} предм.</span>
-                </button>
+                    </Link>
+                    <Typography variant="caption" color="text.disabled">набор {group.year_start}</Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.disabled">{items.length} предм.</Typography>
+                </Box>
 
-                {isOpen && (
-                  <div className="border-t border-slate-100">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="text-left px-6 py-2.5 text-slate-500 font-medium text-xs">Предмет</th>
-                          <th className="text-left px-4 py-2.5 text-slate-500 font-medium text-xs">Кафедра</th>
-                          <th className="text-left px-4 py-2.5 text-slate-500 font-medium text-xs">Год / сем.</th>
-                          <th className="text-left px-4 py-2.5 text-slate-500 font-medium text-xs">Форма контроля</th>
-                          <th className="w-16" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-50">
+                <Collapse in={isOpen} unmountOnExit>
+                  <Box sx={{ borderTop: 1, borderColor: 'divider' }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Предмет</TableCell>
+                          <TableCell>Кафедра</TableCell>
+                          <TableCell>Год / сем.</TableCell>
+                          <TableCell>Форма контроля</TableCell>
+                          <TableCell sx={{ width: 48 }} />
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
                         {items.map(({ assignment, subject, deptName }) => (
-                          <tr
+                          <TableRow
                             key={assignment.id}
+                            hover
+                            sx={{ cursor: 'pointer' }}
                             onClick={() => navigate(`/assignments/${assignment.id}`)}
-                            className="hover:bg-blue-50 cursor-pointer transition-colors"
                           >
-                            <td className="px-6 py-3 text-slate-800 font-medium">{subject.name}</td>
-                            <td className="px-4 py-3 text-slate-500">{deptName ?? '—'}</td>
-                            <td className="px-4 py-3 text-slate-500">{assignment.acad_year} / {assignment.semester}</td>
-                            <td className="px-4 py-3 text-slate-500">{assignment.control_form ?? '—'}</td>
-                            <td className="px-4 py-3 text-right">
-                              <button
+                            <TableCell sx={{ fontWeight: 500 }}>{subject.name}</TableCell>
+                            <TableCell sx={{ color: 'text.secondary' }}>{deptName ?? '—'}</TableCell>
+                            <TableCell sx={{ color: 'text.secondary' }}>{assignment.acad_year} / {assignment.semester}</TableCell>
+                            <TableCell sx={{ color: 'text.secondary' }}>{assignment.control_form ?? '—'}</TableCell>
+                            <TableCell align="right">
+                              <IconButton
+                                size="small"
                                 onClick={e => { e.stopPropagation(); setDeleteId(assignment.id) }}
-                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Удалить назначение"
+                                sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: '#FEF2F2' } }}
                               >
-                                <TrashIcon />
-                              </button>
-                            </td>
-                          </tr>
+                                <DeleteOutlineRounded sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+                      </TableBody>
+                    </Table>
+                  </Box>
+                </Collapse>
+              </Paper>
             )
           })}
-        </div>
+        </Box>
       )}
 
+      {/* Add assignment modal */}
       {showAddModal && teacher && (
         <AddAssignmentModal
           teacherId={teacher.id}
@@ -223,30 +216,33 @@ export default function TeacherDetailPage() {
         />
       )}
 
-      {deleteId !== null && (
-        <ConfirmDelete
-          text="Удалить назначение? Связанные оценки и посещаемость останутся."
-          onConfirm={handleDelete}
-          onCancel={() => setDeleteId(null)}
-        />
-      )}
-    </div>
+      {/* Confirm delete dialog */}
+      <Dialog open={deleteId !== null} onClose={() => setDeleteId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Удалить назначение?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Связанные оценки и посещаемость останутся.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setDeleteId(null)}>Отмена</Button>
+          <Button variant="contained" color="error" disabled={deleting} onClick={handleDelete}>
+            {deleting ? 'Удаление...' : 'Удалить'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   )
 }
 
 function AddAssignmentModal({ teacherId, onClose, onSave }: {
-  teacherId: number
-  onClose: () => void
-  onSave: () => void
+  teacherId: number; onClose: () => void; onSave: () => void
 }) {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [groups, setGroups] = useState<Group[]>([])
   const [subjectId, setSubjectId] = useState('')
   const [groupId, setGroupId] = useState('')
-  const [acadYear, setAcadYear] = useState(() => {
-    const y = new Date().getFullYear()
-    return `${y}-${y + 1}`
-  })
+  const [acadYear, setAcadYear] = useState(() => { const y = new Date().getFullYear(); return `${y}-${y + 1}` })
   const [semester, setSemester] = useState('1')
   const [controlForm, setControlForm] = useState('')
   const [error, setError] = useState('')
@@ -274,89 +270,48 @@ function AddAssignmentModal({ teacherId, onClose, onSave }: {
         ...(controlForm ? { control_form: controlForm } : {}),
       })
       onSave()
-    } catch (e: any) {
-      setError(e?.response?.data?.detail ?? 'Ошибка сохранения')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(msg ?? 'Ошибка сохранения')
       setSaving(false)
     }
   }
 
   return (
-    <Overlay onClose={onClose}>
-      <h2 className="text-lg font-semibold text-slate-800 mb-5">Новое назначение</h2>
-      {loadingData ? (
-        <div className="flex justify-center py-8 text-slate-400">Загрузка...</div>
-      ) : (
-        <>
-          <Field label="Предмет">
-            <select value={subjectId} onChange={e => setSubjectId(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">— выберите предмет —</option>
-              {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Группа">
-            <select value={groupId} onChange={e => setGroupId(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">— выберите группу —</option>
-              {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Учебный год">
-            <input value={acadYear} onChange={e => setAcadYear(e.target.value)}
-              placeholder="2024-2025"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </Field>
-          <Field label="Семестр">
-            <select value={semester} onChange={e => setSemester(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="1">1</option>
-              <option value="2">2</option>
-            </select>
-          </Field>
-          <Field label="Форма контроля (необязательно)">
-            <select value={controlForm} onChange={e => setControlForm(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">— не указана —</option>
-              {CONTROL_FORMS.map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </Field>
-          {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-          <div className="flex justify-end gap-3 mt-2">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">Отмена</button>
-            <button onClick={submit} disabled={saving}
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
-              {saving ? 'Сохранение...' : 'Сохранить'}
-            </button>
-          </div>
-        </>
-      )}
-    </Overlay>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Новое назначение</DialogTitle>
+      <DialogContent>
+        {loadingData ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField select label="Предмет" fullWidth size="small" value={subjectId} onChange={e => setSubjectId(e.target.value)}>
+              <MenuItem value=""><em>— выберите предмет —</em></MenuItem>
+              {subjects.map(s => <MenuItem key={s.id} value={s.id}>{s.name}</MenuItem>)}
+            </TextField>
+            <TextField select label="Группа" fullWidth size="small" value={groupId} onChange={e => setGroupId(e.target.value)}>
+              <MenuItem value=""><em>— выберите группу —</em></MenuItem>
+              {groups.map(g => <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>)}
+            </TextField>
+            <TextField label="Учебный год" fullWidth size="small" placeholder="2024-2025" value={acadYear} onChange={e => setAcadYear(e.target.value)} />
+            <TextField select label="Семестр" fullWidth size="small" value={semester} onChange={e => setSemester(e.target.value)}>
+              <MenuItem value="1">1</MenuItem>
+              <MenuItem value="2">2</MenuItem>
+            </TextField>
+            <TextField select label="Форма контроля (необязательно)" fullWidth size="small" value={controlForm} onChange={e => setControlForm(e.target.value)}>
+              <MenuItem value=""><em>— не указана —</em></MenuItem>
+              {CONTROL_FORMS.map(f => <MenuItem key={f} value={f}>{f}</MenuItem>)}
+            </TextField>
+            {error && <Alert severity="error">{error}</Alert>}
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button color="inherit" onClick={onClose}>Отмена</Button>
+        <Button variant="contained" disabled={saving || loadingData} onClick={submit}>
+          {saving ? 'Сохранение...' : 'Сохранить'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
-}
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div>
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className="text-xl font-bold text-slate-800 mt-0.5">{value}</p>
-    </div>
-  )
-}
-function Chevron() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  )
-}
-function Spinner() {
-  return (
-    <div className="p-8 flex items-center gap-3 text-slate-400">
-      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      Загрузка...
-    </div>
-  )
-}
-function Empty({ text }: { text: string }) {
-  return <div className="bg-white rounded-xl border border-slate-100 p-10 text-center text-slate-400 shadow-sm">{text}</div>
 }

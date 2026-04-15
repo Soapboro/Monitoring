@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import {
+  Box, Paper, Typography, Button, LinearProgress, Chip, CircularProgress,
+  Select, MenuItem, TextField,
+} from '@mui/material'
+import { TimerRounded, ArrowBackRounded, ArrowForwardRounded, ArrowRightAltRounded } from '@mui/icons-material'
 import client from '../../api/client'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -24,7 +29,7 @@ interface Session {
   time_limit_minutes?: number | null
 }
 
-type AnswerMap = Record<number, any> // question_id → answer_data
+type AnswerMap = Record<number, any>
 
 // ─── Timer ───────────────────────────────────────────────────────────────────
 
@@ -43,7 +48,7 @@ function useTimer(limitMinutes: number | null | undefined, onExpire: () => void)
       })
     }, 1000)
     return () => { if (ref.current) clearInterval(ref.current) }
-  }, [limitMinutes])
+  }, [limitMinutes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return left
 }
@@ -54,14 +59,17 @@ function TimerDisplay({ seconds }: { seconds: number | null }) {
   const s = seconds % 60
   const warn = seconds < 120
   return (
-    <div className={`flex items-center gap-1.5 text-sm font-mono font-semibold px-3 py-1.5 rounded-lg ${
-      warn ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-slate-100 text-slate-600'
-    }`}>
-      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
+    <Box sx={{
+      display: 'flex', alignItems: 'center', gap: 0.75,
+      px: 1.5, py: 0.75, borderRadius: 1.5,
+      bgcolor: warn ? '#FEE2E2' : '#F1F5F9',
+      color: warn ? '#DC2626' : '#475569',
+      animation: warn ? 'pulse 1s infinite' : 'none',
+      fontFamily: 'monospace', fontWeight: 700, fontSize: 14,
+    }}>
+      <TimerRounded sx={{ fontSize: 16 }} />
       {String(m).padStart(2, '0')}:{String(s).padStart(2, '0')}
-    </div>
+    </Box>
   )
 }
 
@@ -73,22 +81,36 @@ function SingleChoice({ question, answer, onChange }: {
   const choices = question.options.choices ?? []
   const selected = answer?.selected ?? null
   return (
-    <div className="space-y-3">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {choices.map(ch => (
-        <label key={ch.id}
-          className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${
-            selected === ch.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300 bg-white'
-          }`}>
-          <input type="radio" name={`q${question.id}`} value={ch.id}
-            checked={selected === ch.id} onChange={() => onChange({ selected: ch.id })}
-            className="mt-0.5 accent-blue-600 shrink-0" />
-          <div className="flex-1">
-            {ch.image_url && <img src={ch.image_url} alt="" className="h-24 rounded mb-2 object-contain" />}
-            <span className="text-sm text-slate-800">{ch.text}</span>
-          </div>
-        </label>
+        <Paper
+          key={ch.id}
+          variant="outlined"
+          sx={{
+            p: 2, cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 1.5,
+            borderWidth: 2,
+            borderColor: selected === ch.id ? '#3B82F6' : 'divider',
+            bgcolor: selected === ch.id ? '#EFF6FF' : 'background.paper',
+            transition: 'all 0.15s',
+            '&:hover': { borderColor: selected === ch.id ? '#3B82F6' : '#94A3B8' },
+          }}
+          onClick={() => onChange({ selected: ch.id })}
+        >
+          <Box sx={{
+            width: 18, height: 18, borderRadius: '50%', border: 2,
+            borderColor: selected === ch.id ? '#3B82F6' : '#CBD5E1',
+            bgcolor: selected === ch.id ? '#3B82F6' : 'transparent',
+            flexShrink: 0, mt: 0.25, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {selected === ch.id && <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'white' }} />}
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            {ch.image_url && <Box component="img" src={ch.image_url} alt="" sx={{ height: 96, borderRadius: 1, mb: 1, objectFit: 'contain' }} />}
+            <Typography variant="body2">{ch.text}</Typography>
+          </Box>
+        </Paper>
       ))}
-    </div>
+    </Box>
   )
 }
 
@@ -102,33 +124,50 @@ function MultipleChoice({ question, answer, onChange }: {
     onChange({ selected: next })
   }
   return (
-    <div className="space-y-3">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {choices.map(ch => (
-        <label key={ch.id}
-          className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${
-            selected.includes(ch.id) ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300 bg-white'
-          }`}>
-          <input type="checkbox" value={ch.id}
-            checked={selected.includes(ch.id)} onChange={() => toggle(ch.id)}
-            className="mt-0.5 accent-blue-600 shrink-0" />
-          <div className="flex-1">
-            {ch.image_url && <img src={ch.image_url} alt="" className="h-24 rounded mb-2 object-contain" />}
-            <span className="text-sm text-slate-800">{ch.text}</span>
-          </div>
-        </label>
+        <Paper
+          key={ch.id}
+          variant="outlined"
+          sx={{
+            p: 2, cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 1.5,
+            borderWidth: 2,
+            borderColor: selected.includes(ch.id) ? '#3B82F6' : 'divider',
+            bgcolor: selected.includes(ch.id) ? '#EFF6FF' : 'background.paper',
+            transition: 'all 0.15s',
+            '&:hover': { borderColor: selected.includes(ch.id) ? '#3B82F6' : '#94A3B8' },
+          }}
+          onClick={() => toggle(ch.id)}
+        >
+          <Box sx={{
+            width: 16, height: 16, border: 2, borderRadius: 0.5,
+            borderColor: selected.includes(ch.id) ? '#3B82F6' : '#CBD5E1',
+            bgcolor: selected.includes(ch.id) ? '#3B82F6' : 'transparent',
+            flexShrink: 0, mt: 0.25, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {selected.includes(ch.id) && (
+              <Box component="span" sx={{ color: 'white', fontSize: 11, fontWeight: 700, lineHeight: 1 }}>✓</Box>
+            )}
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            {ch.image_url && <Box component="img" src={ch.image_url} alt="" sx={{ height: 96, borderRadius: 1, mb: 1, objectFit: 'contain' }} />}
+            <Typography variant="body2">{ch.text}</Typography>
+          </Box>
+        </Paper>
       ))}
-    </div>
+    </Box>
   )
 }
 
 function TextInput({ answer, onChange }: { answer: any; onChange: (a: any) => void }) {
   return (
-    <input
-      type="text"
+    <TextField
+      fullWidth
+      size="small"
+      placeholder="Введите ответ..."
       value={answer?.text ?? ''}
       onChange={e => onChange({ text: e.target.value })}
-      placeholder="Введите ответ..."
-      className="w-full text-sm border-2 border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500"
+      sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
     />
   )
 }
@@ -139,8 +178,6 @@ function MatchingInput({ question, answer, onChange }: {
   const left = question.options.left ?? []
   const right = question.options.right ?? []
   const pairs: Record<string, string> = answer?.pairs ?? {}
-
-  // Shuffle right items for display (use state so it's stable)
   const [shuffledRight] = useState(() => [...right].sort(() => Math.random() - 0.5))
 
   function setPair(leftId: string, rightId: string) {
@@ -148,44 +185,45 @@ function MatchingInput({ question, answer, onChange }: {
   }
 
   return (
-    <div className="space-y-3">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {left.map(l => (
-        <div key={l.id} className="flex items-center gap-4 p-4 bg-white border-2 border-slate-200 rounded-xl">
-          <div className="flex-1 min-w-0">
-            {l.image_url && <img src={l.image_url} alt="" className="h-20 rounded mb-2 object-contain" />}
-            <p className="text-sm text-slate-800">{l.text}</p>
-          </div>
-          <svg className="w-5 h-5 text-slate-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-          </svg>
-          <select
+        <Paper key={l.id} variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 2, borderWidth: 2, borderColor: 'divider' }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            {l.image_url && <Box component="img" src={l.image_url} alt="" sx={{ height: 80, borderRadius: 1, mb: 1, objectFit: 'contain' }} />}
+            <Typography variant="body2">{l.text}</Typography>
+          </Box>
+          <ArrowRightAltRounded sx={{ color: 'text.disabled', flexShrink: 0 }} />
+          <Select
+            size="small"
             value={pairs[l.id] ?? ''}
             onChange={e => setPair(l.id, e.target.value)}
-            className={`flex-1 text-sm border-2 rounded-xl px-3 py-2.5 focus:outline-none transition-colors ${
-              pairs[l.id] ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-white'
-            }`}
+            displayEmpty
+            sx={{
+              flex: 1, borderRadius: 2,
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: pairs[l.id] ? '#60A5FA' : undefined,
+              },
+              bgcolor: pairs[l.id] ? '#EFF6FF' : 'background.paper',
+            }}
           >
-            <option value="">Выберите...</option>
+            <MenuItem value=""><em>Выберите...</em></MenuItem>
             {shuffledRight.map(r => (
-              <option key={r.id} value={r.id}>
-                {r.text || `Элемент ${r.id}`}
-              </option>
+              <MenuItem key={r.id} value={r.id}>{r.text || `Элемент ${r.id}`}</MenuItem>
             ))}
-          </select>
-        </div>
+          </Select>
+        </Paper>
       ))}
-      {/* Right images preview if any */}
       {shuffledRight.some(r => r.image_url) && (
-        <div className="grid grid-cols-3 gap-2 mt-2">
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, mt: 1 }}>
           {shuffledRight.map(r => r.image_url && (
-            <div key={r.id} className="text-center">
-              <img src={r.image_url} alt="" className="h-20 w-full rounded-lg object-contain border border-slate-200" />
-              <p className="text-xs text-slate-500 mt-1">{r.text}</p>
-            </div>
+            <Box key={r.id} sx={{ textAlign: 'center' }}>
+              <Box component="img" src={r.image_url} alt="" sx={{ height: 80, width: '100%', borderRadius: 1, objectFit: 'contain', border: 1, borderColor: 'divider' }} />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>{r.text}</Typography>
+            </Box>
           ))}
-        </div>
+        </Box>
       )}
-    </div>
+    </Box>
   )
 }
 
@@ -196,31 +234,50 @@ function ResultsScreen({ session, onBack }: { session: Session; onBack: () => vo
     ? Math.round((session.score_total ?? 0) / session.score_max * 100)
     : 0
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl shadow-lg max-w-md w-full p-8 text-center">
-        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 ${
-          session.passed ? 'bg-emerald-100' : 'bg-red-100'
-        }`}>
-          <span className="text-3xl">{session.passed ? '✓' : '✗'}</span>
-        </div>
-        <h2 className={`text-2xl font-bold mb-1 ${session.passed ? 'text-emerald-600' : 'text-red-600'}`}>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 3 }}>
+      <Paper elevation={3} sx={{ maxWidth: 400, width: '100%', p: 5, textAlign: 'center', borderRadius: 3 }}>
+        <Box sx={{
+          width: 80, height: 80, borderRadius: '50%', mx: 'auto', mb: 2,
+          bgcolor: session.passed ? '#D1FAE5' : '#FEE2E2',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Typography sx={{ fontSize: 32, color: session.passed ? '#059669' : '#DC2626' }}>
+            {session.passed ? '✓' : '✗'}
+          </Typography>
+        </Box>
+        <Typography variant="h5" fontWeight={700} sx={{ color: session.passed ? '#059669' : '#DC2626', mb: 0.5 }}>
           {session.passed ? 'Тест сдан!' : 'Тест не сдан'}
-        </h2>
-        <p className="text-slate-500 text-sm mb-6">
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           {session.score_total?.toFixed(1)} из {session.score_max?.toFixed(1)} баллов
-        </p>
-        <div className="text-5xl font-bold mb-2 text-slate-800">{pct}%</div>
-        <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden mb-6">
-          <div className={`h-full rounded-full transition-all ${session.passed ? 'bg-emerald-400' : 'bg-red-400'}`}
-            style={{ width: `${pct}%` }} />
-        </div>
-        <button onClick={onBack}
-          className="w-full py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors">
+        </Typography>
+        <Typography variant="h2" fontWeight={700} sx={{ mb: 1.5 }}>{pct}%</Typography>
+        <LinearProgress
+          variant="determinate"
+          value={pct}
+          sx={{
+            height: 12, borderRadius: 6, mb: 4,
+            bgcolor: '#E2E8F0',
+            '& .MuiLinearProgress-bar': {
+              bgcolor: session.passed ? '#34D399' : '#F87171',
+              borderRadius: 6,
+            },
+          }}
+        />
+        <Button variant="contained" fullWidth size="large" onClick={onBack} sx={{ borderRadius: 2 }}>
           К списку тестов
-        </button>
-      </div>
-    </div>
+        </Button>
+      </Paper>
+    </Box>
   )
+}
+
+// ─── Difficulty chip ──────────────────────────────────────────────────────────
+
+const DIFF_SX: Record<string, { bgcolor: string; color: string }> = {
+  easy:   { bgcolor: '#DCFCE7', color: '#16A34A' },
+  medium: { bgcolor: '#FEF3C7', color: '#92400E' },
+  hard:   { bgcolor: '#FEE2E2', color: '#DC2626' },
 }
 
 // ─── Main player ──────────────────────────────────────────────────────────────
@@ -265,10 +322,7 @@ export default function TestPlayerPage() {
     if (!data) return
     savingRef.current = true
     try {
-      await client.post(`/sessions/${sid}/answer`, {
-        question_id: q.id,
-        answer_data: data,
-      })
+      await client.post(`/sessions/${sid}/answer`, { question_id: q.id, answer_data: data })
     } finally { savingRef.current = false }
   }
 
@@ -290,20 +344,20 @@ export default function TestPlayerPage() {
   }
 
   if (loading) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="flex items-center gap-3 text-slate-400">
-        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-        Загрузка теста...
-      </div>
-    </div>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, color: 'text.secondary' }}>
+        <CircularProgress size={24} />
+        <Typography>Загрузка теста...</Typography>
+      </Box>
+    </Box>
   )
 
   if (finished && session) return <ResultsScreen session={session} onBack={() => navigate('/my-tests')} />
 
   if (!q) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-400">
-      Вопросов нет
-    </div>
+    <Box sx={{ minHeight: '100vh', bgcolor: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Typography color="text.secondary">Вопросов нет</Typography>
+    </Box>
   )
 
   const isAnswered = (qid: number) => {
@@ -320,67 +374,72 @@ export default function TestPlayerPage() {
   const unanswered = questions.filter(x => !isAnswered(x.id)).length
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <Box sx={{ minHeight: '100vh', bgcolor: '#F8FAFC', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-semibold text-slate-700">
+      <Box sx={{ bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider', px: 3, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ flex: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.75 }}>
+            <Typography variant="body2" fontWeight={600}>
               Вопрос {current + 1} из {questions.length}
-            </span>
-            <span className="text-xs text-slate-400">· Отвечено: {answered}/{questions.length}</span>
-          </div>
-          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 rounded-full transition-all"
-              style={{ width: `${(answered / questions.length) * 100}%` }} />
-          </div>
-        </div>
+            </Typography>
+            <Typography variant="caption" color="text.disabled">· Отвечено: {answered}/{questions.length}</Typography>
+          </Box>
+          <LinearProgress
+            variant="determinate"
+            value={(answered / questions.length) * 100}
+            sx={{
+              height: 6, borderRadius: 3,
+              bgcolor: '#F1F5F9',
+              '& .MuiLinearProgress-bar': { bgcolor: '#3B82F6', borderRadius: 3 },
+            }}
+          />
+        </Box>
         <TimerDisplay seconds={timeLeft} />
-      </div>
+      </Box>
 
-      <div className="flex flex-1 overflow-hidden">
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Question dots sidebar */}
-        <div className="w-16 bg-white border-r border-slate-200 flex flex-col items-center py-4 gap-2 overflow-y-auto shrink-0">
+        <Box sx={{
+          width: 64, bgcolor: 'background.paper', borderRight: 1, borderColor: 'divider',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', py: 2, gap: 1, overflowY: 'auto', flexShrink: 0,
+        }}>
           {questions.map((x, i) => (
-            <button key={x.id} onClick={() => goTo(i)}
-              className={`w-9 h-9 rounded-lg text-xs font-medium transition-colors ${
-                i === current
-                  ? 'bg-blue-600 text-white'
-                  : isAnswered(x.id)
-                    ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-              }`}>
+            <Box
+              key={x.id}
+              onClick={() => goTo(i)}
+              sx={{
+                width: 36, height: 36, borderRadius: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
+                bgcolor: i === current ? '#2563EB' : isAnswered(x.id) ? '#D1FAE5' : '#F1F5F9',
+                color: i === current ? 'white' : isAnswered(x.id) ? '#065F46' : '#64748B',
+                '&:hover': { opacity: 0.8 },
+              }}
+            >
               {i + 1}
-            </button>
+            </Box>
           ))}
-        </div>
+        </Box>
 
         {/* Main question area */}
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-2xl mx-auto">
-            {/* Question */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-6 shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-medium">
-                  {q.score_max} {q.score_max === 1 ? 'балл' : 'баллов'}
-                </span>
-                <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                  q.difficulty === 'easy' ? 'bg-green-100 text-green-600' :
-                  q.difficulty === 'hard' ? 'bg-red-100 text-red-600' :
-                  'bg-amber-100 text-amber-600'
-                }`}>{q.difficulty}</span>
+        <Box sx={{ flex: 1, overflowY: 'auto', p: 4 }}>
+          <Box sx={{ maxWidth: 640, mx: 'auto' }}>
+            {/* Question card */}
+            <Paper elevation={1} sx={{ p: 3, mb: 3, borderRadius: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                <Chip label={`${q.score_max} ${q.score_max === 1 ? 'балл' : 'баллов'}`} size="small" sx={{ bgcolor: '#DBEAFE', color: '#1D4ED8', fontWeight: 600 }} />
+                <Chip label={q.difficulty} size="small" sx={DIFF_SX[q.difficulty] ?? { bgcolor: '#F1F5F9', color: '#64748b' }} />
                 {q.question_type === 'matching' && (
-                  <span className="text-xs text-slate-400">Соотнесите элементы</span>
+                  <Typography variant="caption" color="text.disabled">Соотнесите элементы</Typography>
                 )}
                 {q.question_type === 'multiple_choice' && (
-                  <span className="text-xs text-slate-400">Несколько правильных ответов</span>
+                  <Typography variant="caption" color="text.disabled">Несколько правильных ответов</Typography>
                 )}
-              </div>
+              </Box>
               {q.image_url && (
-                <img src={q.image_url} alt="" className="w-full max-h-64 object-contain rounded-xl mb-4 border border-slate-100" />
+                <Box component="img" src={q.image_url} alt="" sx={{ width: '100%', maxHeight: 256, objectFit: 'contain', borderRadius: 2, mb: 2, border: 1, borderColor: 'divider' }} />
               )}
-              <p className="text-base text-slate-800 leading-relaxed">{q.body}</p>
-            </div>
+              <Typography variant="body1" sx={{ lineHeight: 1.7 }}>{q.body}</Typography>
+            </Paper>
 
             {/* Answer input */}
             {q.question_type === 'single_choice' && (
@@ -397,56 +456,57 @@ export default function TestPlayerPage() {
             )}
 
             {/* Navigation */}
-            <div className="flex items-center justify-between mt-8">
-              <button
-                onClick={() => goTo(current - 1)} disabled={current === 0}
-                className="flex items-center gap-2 px-4 py-2 text-sm border border-slate-200 rounded-xl hover:bg-slate-50 disabled:opacity-40 transition-colors">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 4 }}>
+              <Button
+                variant="outlined" size="small" startIcon={<ArrowBackRounded />}
+                disabled={current === 0}
+                onClick={() => goTo(current - 1)}
+                sx={{ borderColor: 'divider', color: 'text.primary', borderRadius: 2 }}
+              >
                 Назад
-              </button>
+              </Button>
 
               {current < questions.length - 1 ? (
-                <button onClick={() => goTo(current + 1)}
-                  className="flex items-center gap-2 px-5 py-2 text-sm bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors">
+                <Button
+                  variant="contained" size="small" endIcon={<ArrowForwardRounded />}
+                  onClick={() => goTo(current + 1)}
+                  sx={{ borderRadius: 2 }}
+                >
                   Далее
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+                </Button>
               ) : (
-                <button
-                  onClick={() => handleFinish(false)} disabled={submitting}
-                  className="px-5 py-2 text-sm bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                <Button
+                  variant="contained" size="small" color="success"
+                  disabled={submitting}
+                  onClick={() => handleFinish(false)}
+                  sx={{ borderRadius: 2 }}
+                >
                   {submitting ? 'Завершение...' : 'Завершить тест'}
-                </button>
+                </Button>
               )}
-            </div>
+            </Box>
 
             {/* Finish confirm warning */}
             {confirmFinish && (
-              <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-sm text-amber-800 mb-3">
+              <Paper variant="outlined" sx={{ mt: 2, p: 2, borderColor: '#FCD34D', bgcolor: '#FFFBEB', borderRadius: 2 }}>
+                <Typography variant="body2" sx={{ color: '#92400E', mb: 1.5 }}>
                   {unanswered > 0
                     ? `Остались без ответа: ${unanswered} вопросов. Завершить всё равно?`
                     : 'Завершить тест?'}
-                </p>
-                <div className="flex gap-3">
-                  <button onClick={() => handleFinish(true)} disabled={submitting}
-                    className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50">
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1.5 }}>
+                  <Button variant="contained" color="success" size="small" disabled={submitting} onClick={() => handleFinish(true)} sx={{ borderRadius: 1.5 }}>
                     {submitting ? 'Завершение...' : 'Да, завершить'}
-                  </button>
-                  <button onClick={() => setConfirmFinish(false)}
-                    className="px-4 py-2 text-sm border border-slate-200 rounded-lg hover:bg-slate-50">
+                  </Button>
+                  <Button variant="outlined" size="small" onClick={() => setConfirmFinish(false)} sx={{ borderColor: 'divider', color: 'text.primary', borderRadius: 1.5 }}>
                     Отмена
-                  </button>
-                </div>
-              </div>
+                  </Button>
+                </Box>
+              </Paper>
             )}
-          </div>
-        </div>
-      </div>
-    </div>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   )
 }

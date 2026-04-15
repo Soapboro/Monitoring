@@ -115,3 +115,64 @@ export async function getRatingBySubjects(): Promise<SubjectRatingRow[]> {
   const { data } = await client.get('/analytics/rating/subjects')
   return data
 }
+
+export interface QuestionStat {
+  test_question_id: number
+  order_index: number
+  question_id: number
+  question_text: string
+  question_type: string
+  topic: string | null
+  attempts: number
+  correct_count: number
+  error_rate_pct: number | null
+  avg_time_sec: number | null
+}
+
+export interface TestDuration {
+  test_id: number
+  title: string
+  subject: string
+  attempts: number
+  avg_duration_sec: number | null
+  min_duration_sec: number | null
+  max_duration_sec: number | null
+}
+
+export interface TopicMastery {
+  topic_id: number
+  topic: string
+  attempts: number
+  correct_count: number
+  correct_pct: number | null
+}
+
+export interface StudentWeakness {
+  student_id: number
+  student_name: string
+  topic_id: number
+  topic: string
+  attempts: number
+  correct_count: number
+  correct_pct: number | null
+}
+
+export async function getQuestionStats(testId: number): Promise<QuestionStat[]> {
+  const { data } = await client.get('/analytics/question-stats', { params: { test_id: testId } })
+  return data
+}
+
+export async function getTestDurations(): Promise<TestDuration[]> {
+  const { data } = await client.get('/analytics/test-durations')
+  return data
+}
+
+export async function getTopicMastery(groupId: number): Promise<TopicMastery[]> {
+  const { data } = await client.get('/analytics/topic-mastery', { params: { group_id: groupId } })
+  return data
+}
+
+export async function getStudentWeaknesses(groupId: number, minAttempts = 2): Promise<StudentWeakness[]> {
+  const { data } = await client.get('/analytics/student-weaknesses', { params: { group_id: groupId, min_attempts: minAttempts } })
+  return data
+}

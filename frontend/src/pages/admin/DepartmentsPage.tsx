@@ -10,7 +10,6 @@ import { SearchRounded, EditRounded, DeleteRounded, AddRounded } from '@mui/icon
 import client from '../../api/client'
 import type { Subject, Department } from '../../api/resources'
 import { createDepartment, updateDepartment, deleteDepartment } from '../../api/resources'
-import { ConfirmDelete } from '../../components/CrudHelpers'
 import { useSort } from '../../hooks/useSort'
 import SortableHeader from '../../components/SortableHeader'
 import { PEACH, WARM } from '../../theme'
@@ -137,10 +136,14 @@ export default function DepartmentsPage() {
         <DepartmentModal mode={modal.mode} dept={modal.dept}
           onClose={() => setModal(null)} onSave={() => { setModal(null); load() }} />
       )}
-      {deleteId !== null && (
-        <ConfirmDelete text="Удалить кафедру? Это действие необратимо."
-          onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
-      )}
+      <Dialog open={deleteId !== null} onClose={() => setDeleteId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Удалить кафедру?</DialogTitle>
+        <DialogContent><Typography variant="body2" color="text.secondary">Это действие необратимо.</Typography></DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setDeleteId(null)}>Отмена</Button>
+          <Button variant="contained" color="error" onClick={handleDelete}>Удалить</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

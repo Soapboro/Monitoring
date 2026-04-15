@@ -9,7 +9,6 @@ import { SearchRounded, EditRounded, DeleteRounded, AddRounded } from '@mui/icon
 import client from '../../api/client'
 import { createUser, updateUser, deleteUser } from '../../api/resources'
 import type { UserMe } from '../../api/auth'
-import { ConfirmDelete } from '../../components/CrudHelpers'
 import { useSort } from '../../hooks/useSort'
 import SortableHeader from '../../components/SortableHeader'
 
@@ -114,10 +113,14 @@ export default function UsersPage() {
         <UserModal mode={modal.mode} user={modal.user}
           onClose={() => setModal(null)} onSave={() => { setModal(null); load() }} />
       )}
-      {deleteId !== null && (
-        <ConfirmDelete text="Удалить пользователя? Это действие необратимо."
-          onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
-      )}
+      <Dialog open={deleteId !== null} onClose={() => setDeleteId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Удалить пользователя?</DialogTitle>
+        <DialogContent><Typography variant="body2" color="text.secondary">Это действие необратимо.</Typography></DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setDeleteId(null)}>Отмена</Button>
+          <Button variant="contained" color="error" onClick={handleDelete}>Удалить</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

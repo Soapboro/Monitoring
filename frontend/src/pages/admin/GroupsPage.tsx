@@ -9,7 +9,6 @@ import {
 import { SearchRounded, EditRounded, DeleteRounded, AddRounded, ChevronRightRounded } from '@mui/icons-material'
 import type { Group, Department } from '../../api/resources'
 import { getGroups, getDepartments, createGroup, updateGroup, deleteGroup } from '../../api/resources'
-import { ConfirmDelete } from '../../components/CrudHelpers'
 import { useSort } from '../../hooks/useSort'
 import SortableHeader from '../../components/SortableHeader'
 
@@ -113,10 +112,14 @@ export default function GroupsPage() {
         <GroupModal mode={modal.mode} group={modal.group} departments={departments}
           onClose={() => setModal(null)} onSave={() => { setModal(null); load() }} />
       )}
-      {deleteId !== null && (
-        <ConfirmDelete text="Удалить группу? Это действие необратимо."
-          onConfirm={handleDelete} onCancel={() => setDeleteId(null)} />
-      )}
+      <Dialog open={deleteId !== null} onClose={() => setDeleteId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Удалить группу?</DialogTitle>
+        <DialogContent><Typography variant="body2" color="text.secondary">Это действие необратимо.</Typography></DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setDeleteId(null)}>Отмена</Button>
+          <Button variant="contained" color="error" onClick={handleDelete}>Удалить</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

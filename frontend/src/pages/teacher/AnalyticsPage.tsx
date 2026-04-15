@@ -143,7 +143,7 @@ export default function AnalyticsPage() {
                 <TableHead>
                   <TableRow>
                     <TableCell>Дисциплина</TableCell>
-                    <TableCell align="right">Сдали / Выдано</TableCell>
+                    <TableCell align="right">Сдали / Студентов</TableCell>
                     <TableCell align="right">Прогресс</TableCell>
                   </TableRow>
                 </TableHead>

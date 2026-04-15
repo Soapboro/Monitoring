@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import {
+  Box, Paper, Typography, Chip, CircularProgress, Button, IconButton,
+  Tabs, Tab, TextField, Checkbox, FormControlLabel, Select, MenuItem,
+  Table, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle,
+  DialogContent, DialogActions, Alert,
+} from '@mui/material'
+import {
+  ArrowBackRounded, AddRounded, DeleteOutlineRounded,
+  KeyboardArrowUpRounded, KeyboardArrowDownRounded,
+} from '@mui/icons-material'
 import client from '../../api/client'
 import { getSubjects, getGroups, getMyTeacherProfile, getAssignments } from '../../api/resources'
 import type { Subject, Group, TeachingAssignment } from '../../api/resources'
@@ -34,15 +44,25 @@ const QTYPES: { value: QType; label: string }[] = [
   { value: 'matching',        label: 'На соответствие' },
 ]
 const DIFFICULTIES = [
-  { value: 'easy', label: 'Лёгкий' },
+  { value: 'easy',   label: 'Лёгкий' },
   { value: 'medium', label: 'Средний' },
-  { value: 'hard', label: 'Сложный' },
+  { value: 'hard',   label: 'Сложный' },
 ]
-const STATUS_ACTIONS: { value: string; label: string; cls: string }[] = [
-  { value: 'draft',     label: 'Черновик',    cls: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
-  { value: 'published', label: 'Опубликовать', cls: 'bg-emerald-600 text-white hover:bg-emerald-700' },
-  { value: 'archived',  label: 'В архив',     cls: 'bg-amber-100 text-amber-700 hover:bg-amber-200' },
-]
+
+const STATUS_SX: Record<string, { bgcolor: string; color: string }> = {
+  draft:     { bgcolor: '#F1F5F9', color: '#64748b' },
+  published: { bgcolor: '#D4EDDF', color: '#347856' },
+  archived:  { bgcolor: '#FEF3C7', color: '#92400E' },
+}
+const STATUS_LABEL: Record<string, string> = { draft: 'Черновик', published: 'Опубликован', archived: 'Архив' }
+const QTYPE_LABEL: Record<string, string> = {
+  single_choice: 'Один', multiple_choice: 'Несколько', text_input: 'Текст', matching: 'Соответствие',
+}
+const DIFF_SX: Record<string, { bgcolor: string; color: string }> = {
+  easy:   { bgcolor: '#DCFCE7', color: '#16A34A' },
+  medium: { bgcolor: '#FEF3C7', color: '#92400E' },
+  hard:   { bgcolor: '#FEE2E2', color: '#DC2626' },
+}
 
 // ─── Upload helper ────────────────────────────────────────────────────────────
 
@@ -57,28 +77,27 @@ function ImageUploadBtn({ url, onChange }: { url: string | null; onChange: (url:
   const ref = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   return (
-    <div className="flex items-center gap-2 mt-1">
-      <input ref={ref} type="file" accept="image/*" className="hidden" onChange={async e => {
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+      <input ref={ref} type="file" accept="image/*" style={{ display: 'none' }} onChange={async e => {
         const file = e.target.files?.[0]; if (!file) return
         setUploading(true)
         try { onChange(await uploadImage(file)) } finally { setUploading(false); e.target.value = '' }
       }} />
       {url ? (
-        <div className="flex items-center gap-2">
-          <img src={url} alt="" className="h-14 rounded border border-slate-200 object-cover" />
-          <button type="button" onClick={() => onChange(null)} className="text-xs text-red-500 hover:underline">Удалить</button>
-        </div>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box component="img" src={url} alt="" sx={{ height: 56, borderRadius: 1, border: 1, borderColor: 'divider', objectFit: 'cover' }} />
+          <Button size="small" color="error" onClick={() => onChange(null)} sx={{ fontSize: 11 }}>Удалить</Button>
+        </Box>
       ) : (
-        <button type="button" onClick={() => ref.current?.click()} disabled={uploading}
-          className="text-xs text-blue-600 hover:underline disabled:opacity-50">
+        <Button size="small" disabled={uploading} onClick={() => ref.current?.click()} sx={{ fontSize: 11, color: 'primary.main' }}>
           {uploading ? 'Загрузка...' : '+ Добавить изображение'}
-        </button>
+        </Button>
       )}
-    </div>
+    </Box>
   )
 }
 
-// ─── Choice editor (single / multiple) ───────────────────────────────────────
+// ─── Choices editor ───────────────────────────────────────────────────────────
 
 function ChoicesEditor({ type, choices, correct, onChange }: {
   type: 'single_choice' | 'multiple_choice'
@@ -104,34 +123,50 @@ function ChoicesEditor({ type, choices, correct, onChange }: {
   }
 
   return (
-    <div className="space-y-3">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {choices.map((ch, i) => (
-        <div key={ch.id} className={`flex gap-3 p-3 rounded-lg border ${correct.includes(ch.id) ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
-          <input
+        <Box key={ch.id} sx={{
+          display: 'flex', gap: 1.5, p: 1.5, borderRadius: 1, border: 1,
+          borderColor: correct.includes(ch.id) ? '#6EE7B7' : 'divider',
+          bgcolor: correct.includes(ch.id) ? '#F0FDF4' : '#F8FAFC',
+        }}>
+          <Box
+            component={type === 'single_choice' ? 'input' : 'input'}
             type={type === 'single_choice' ? 'radio' : 'checkbox'}
             checked={correct.includes(ch.id)}
             onChange={() => toggleCorrect(ch.id)}
-            className="mt-1 shrink-0 accent-emerald-600"
+            style={{ marginTop: 4, flexShrink: 0, accentColor: '#10B981' }}
           />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400 shrink-0">{String.fromCharCode(65 + i)}.</span>
-              <input
-                value={ch.text} onChange={e => updateChoice(ch.id, { text: e.target.value })}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="caption" color="text.disabled" sx={{ flexShrink: 0, fontWeight: 500 }}>
+                {String.fromCharCode(65 + i)}.
+              </Typography>
+              <Box
+                component="input"
+                value={ch.text}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateChoice(ch.id, { text: e.target.value })}
                 placeholder="Текст варианта..."
-                className="flex-1 text-sm bg-transparent border-none outline-none"
+                style={{ flex: 1, fontSize: 13, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'inherit' }}
               />
-            </div>
+            </Box>
             <ImageUploadBtn url={ch.image_url} onChange={url => updateChoice(ch.id, { image_url: url })} />
-          </div>
-          <button type="button" onClick={() => removeChoice(ch.id)} className="text-slate-300 hover:text-red-500 shrink-0 text-lg leading-none">&times;</button>
-        </div>
+          </Box>
+          <IconButton size="small" onClick={() => removeChoice(ch.id)} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' }, alignSelf: 'flex-start' }}>
+            <DeleteOutlineRounded sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Box>
       ))}
-      <button type="button" onClick={addChoice}
-        className="w-full py-2 border border-dashed border-slate-300 rounded-lg text-sm text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-colors">
-        + Добавить вариант
-      </button>
-    </div>
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<AddRounded />}
+        onClick={addChoice}
+        sx={{ borderStyle: 'dashed', color: 'text.secondary', borderColor: 'divider', '&:hover': { borderColor: 'primary.main', color: 'primary.main' } }}
+      >
+        Добавить вариант
+      </Button>
+    </Box>
   )
 }
 
@@ -141,107 +176,80 @@ function MatchingEditor({ left, right, correct, onChange }: {
   left: Item[]; right: Item[]; correct: Record<string, string>
   onChange: (left: Item[], right: Item[], correct: Record<string, string>) => void
 }) {
-  function addLeft() {
-    const id = `l${Date.now()}`
-    onChange([...left, { id, text: '', image_url: null }], right, correct)
-  }
-  function addRight() {
-    const id = `r${Date.now()}`
-    onChange(left, [...right, { id, text: '', image_url: null }], correct)
-  }
-  function updateLeft(id: string, patch: Partial<Item>) {
-    onChange(left.map(x => x.id === id ? { ...x, ...patch } : x), right, correct)
-  }
-  function updateRight(id: string, patch: Partial<Item>) {
-    onChange(left, right.map(x => x.id === id ? { ...x, ...patch } : x), correct)
-  }
-  function removeLeft(id: string) {
-    const nc = { ...correct }; delete nc[id]
-    onChange(left.filter(x => x.id !== id), right, nc)
-  }
-  function removeRight(id: string) {
-    const nc = Object.fromEntries(Object.entries(correct).filter(([, v]) => v !== id))
-    onChange(left, right.filter(x => x.id !== id), nc)
-  }
-  function setPair(leftId: string, rightId: string) {
-    onChange(left, right, { ...correct, [leftId]: rightId })
-  }
+  function addLeft() { const id = `l${Date.now()}`; onChange([...left, { id, text: '', image_url: null }], right, correct) }
+  function addRight() { const id = `r${Date.now()}`; onChange(left, [...right, { id, text: '', image_url: null }], correct) }
+  function updateLeft(id: string, patch: Partial<Item>) { onChange(left.map(x => x.id === id ? { ...x, ...patch } : x), right, correct) }
+  function updateRight(id: string, patch: Partial<Item>) { onChange(left, right.map(x => x.id === id ? { ...x, ...patch } : x), correct) }
+  function removeLeft(id: string) { const nc = { ...correct }; delete nc[id]; onChange(left.filter(x => x.id !== id), right, nc) }
+  function removeRight(id: string) { const nc = Object.fromEntries(Object.entries(correct).filter(([, v]) => v !== id)); onChange(left, right.filter(x => x.id !== id), nc) }
+  function setPair(leftId: string, rightId: string) { onChange(left, right, { ...correct, [leftId]: rightId }) }
 
   function ItemField({ item, onUpdate, onRemove }: { item: Item; onUpdate: (p: Partial<Item>) => void; onRemove: () => void }) {
     return (
-      <div className="flex gap-2 p-2 border border-slate-200 rounded-lg bg-slate-50">
-        <div className="flex-1 min-w-0">
-          <input value={item.text} onChange={e => onUpdate({ text: e.target.value })}
-            placeholder="Текст элемента..." className="w-full text-sm bg-transparent outline-none" />
+      <Box sx={{ display: 'flex', gap: 1, p: 1, border: 1, borderColor: 'divider', borderRadius: 1, bgcolor: '#F8FAFC' }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box
+            component="input"
+            value={item.text}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => onUpdate({ text: e.target.value })}
+            placeholder="Текст элемента..."
+            style={{ width: '100%', fontSize: 13, background: 'transparent', border: 'none', outline: 'none', fontFamily: 'inherit' }}
+          />
           <ImageUploadBtn url={item.image_url} onChange={url => onUpdate({ image_url: url })} />
-        </div>
-        <button type="button" onClick={onRemove} className="text-slate-300 hover:text-red-500 text-lg leading-none shrink-0">&times;</button>
-      </div>
+        </Box>
+        <IconButton size="small" onClick={onRemove} sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' }, alignSelf: 'flex-start' }}>
+          <DeleteOutlineRounded sx={{ fontSize: 14 }} />
+        </IconButton>
+      </Box>
     )
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        {/* Left column */}
-        <div>
-          <p className="text-xs font-medium text-slate-500 mb-2">Левый столбец</p>
-          <div className="space-y-2">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+        <Box>
+          <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ display: 'block', mb: 1 }}>Левый столбец</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {left.map(item => (
-              <ItemField key={item.id} item={item}
-                onUpdate={p => updateLeft(item.id, p)}
-                onRemove={() => removeLeft(item.id)} />
+              <ItemField key={item.id} item={item} onUpdate={p => updateLeft(item.id, p)} onRemove={() => removeLeft(item.id)} />
             ))}
-            <button type="button" onClick={addLeft}
-              className="w-full py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-400 hover:border-blue-400 hover:text-blue-500">
-              + Добавить
-            </button>
-          </div>
-        </div>
-        {/* Right column */}
-        <div>
-          <p className="text-xs font-medium text-slate-500 mb-2">Правый столбец</p>
-          <div className="space-y-2">
+            <Button size="small" variant="outlined" onClick={addLeft} sx={{ borderStyle: 'dashed', color: 'text.secondary', borderColor: 'divider', fontSize: 12 }}>+ Добавить</Button>
+          </Box>
+        </Box>
+        <Box>
+          <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ display: 'block', mb: 1 }}>Правый столбец</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {right.map(item => (
-              <ItemField key={item.id} item={item}
-                onUpdate={p => updateRight(item.id, p)}
-                onRemove={() => removeRight(item.id)} />
+              <ItemField key={item.id} item={item} onUpdate={p => updateRight(item.id, p)} onRemove={() => removeRight(item.id)} />
             ))}
-            <button type="button" onClick={addRight}
-              className="w-full py-1.5 border border-dashed border-slate-300 rounded-lg text-xs text-slate-400 hover:border-blue-400 hover:text-blue-500">
-              + Добавить
-            </button>
-          </div>
-        </div>
-      </div>
-      {/* Pairs */}
+            <Button size="small" variant="outlined" onClick={addRight} sx={{ borderStyle: 'dashed', color: 'text.secondary', borderColor: 'divider', fontSize: 12 }}>+ Добавить</Button>
+          </Box>
+        </Box>
+      </Box>
       {left.length > 0 && right.length > 0 && (
-        <div>
-          <p className="text-xs font-medium text-slate-500 mb-2">Правильные пары</p>
-          <div className="space-y-2">
+        <Box>
+          <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ display: 'block', mb: 1 }}>Правильные пары</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {left.map(l => (
-              <div key={l.id} className="flex items-center gap-3">
-                <div className="flex-1 text-sm bg-slate-50 border border-slate-200 rounded px-2 py-1 truncate">
-                  {l.image_url && <img src={l.image_url} alt="" className="h-6 inline mr-1 rounded" />}
-                  {l.text || <span className="text-slate-300 italic">—</span>}
-                </div>
-                <span className="text-slate-400">→</span>
-                <select
-                  value={correct[l.id] ?? ''}
-                  onChange={e => setPair(l.id, e.target.value)}
-                  className="flex-1 text-sm border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              <Box key={l.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ flex: 1, fontSize: 13, bgcolor: '#F8FAFC', border: 1, borderColor: 'divider', borderRadius: 1, px: 1.5, py: 0.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {l.image_url && <Box component="img" src={l.image_url} alt="" sx={{ height: 24, borderRadius: 0.5, mr: 0.5, verticalAlign: 'middle' }} />}
+                  <Typography variant="caption">{l.text || <span style={{ color: '#CBD5E1', fontStyle: 'italic' }}>—</span>}</Typography>
+                </Box>
+                <Typography color="text.disabled" sx={{ flexShrink: 0 }}>→</Typography>
+                <Select
+                  size="small" value={correct[l.id] ?? ''} onChange={e => setPair(l.id, e.target.value)}
+                  displayEmpty sx={{ flex: 1, fontSize: 13 }}
                 >
-                  <option value="">Выберите...</option>
-                  {right.map(r => (
-                    <option key={r.id} value={r.id}>{r.text || `(элемент ${r.id})`}</option>
-                  ))}
-                </select>
-              </div>
+                  <MenuItem value=""><em>Выберите...</em></MenuItem>
+                  {right.map(r => <MenuItem key={r.id} value={r.id}>{r.text || `(элемент ${r.id})`}</MenuItem>)}
+                </Select>
+              </Box>
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
-    </div>
+    </Box>
   )
 }
 
@@ -264,41 +272,32 @@ function QuestionModal({ testId, subjectId, initial, onSave, onClose }: {
   const [scoreMax, setScoreMax] = useState(initial?.score_max ?? 1)
   const [explanation, setExplanation] = useState(initial?.explanation ?? '')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-  // Choices state
   const initChoices = (): Item[] => initial?.options?.choices ?? [
     { id: 'a', text: '', image_url: null },
     { id: 'b', text: '', image_url: null },
   ]
   const [choices, setChoices] = useState<Item[]>(initChoices)
   const [correct, setCorrect] = useState<string[]>(initial?.options?.correct ?? [])
+  const [correctTexts, setCorrectTexts] = useState<string[]>(initial?.options?.correct_texts ?? [''])
 
-  // Text input state
-  const [correctTexts, setCorrectTexts] = useState<string[]>(
-    initial?.options?.correct_texts ?? ['']
-  )
-
-  // Matching state
   const initLeft = (): Item[] => initial?.options?.left ?? [
-    { id: 'l1', text: '', image_url: null },
-    { id: 'l2', text: '', image_url: null },
+    { id: 'l1', text: '', image_url: null }, { id: 'l2', text: '', image_url: null },
   ]
   const initRight = (): Item[] => initial?.options?.right ?? [
-    { id: 'r1', text: '', image_url: null },
-    { id: 'r2', text: '', image_url: null },
+    { id: 'r1', text: '', image_url: null }, { id: 'r2', text: '', image_url: null },
   ]
   const [matchLeft, setMatchLeft] = useState<Item[]>(initLeft)
   const [matchRight, setMatchRight] = useState<Item[]>(initRight)
-  const [matchCorrect, setMatchCorrect] = useState<Record<string, string>>(
-    initial?.options?.correct ?? {}
-  )
+  const [matchCorrect, setMatchCorrect] = useState<Record<string, string>>(initial?.options?.correct ?? {})
 
   useEffect(() => {
     client.get<Topic[]>('/topics', { params: { subject_id: subjectId } }).then(r => {
       setTopics(r.data)
       if (!topicId && r.data.length > 0) setTopicId(r.data[0].id)
     })
-  }, [subjectId])
+  }, [subjectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function createTopic() {
     if (!newTopicTitle.trim()) return
@@ -312,203 +311,150 @@ function QuestionModal({ testId, subjectId, initial, onSave, onClose }: {
   }
 
   function buildOptions() {
-    if (qtype === 'single_choice' || qtype === 'multiple_choice') {
-      return { choices, correct }
-    }
-    if (qtype === 'text_input') {
-      return { correct_texts: correctTexts.filter(t => t.trim()) }
-    }
-    if (qtype === 'matching') {
-      return { left: matchLeft, right: matchRight, correct: matchCorrect }
-    }
+    if (qtype === 'single_choice' || qtype === 'multiple_choice') return { choices, correct }
+    if (qtype === 'text_input') return { correct_texts: correctTexts.filter(t => t.trim()) }
+    if (qtype === 'matching') return { left: matchLeft, right: matchRight, correct: matchCorrect }
     return {}
   }
 
   async function handleSave() {
-    if (!topicId) return alert('Выберите или создайте тему')
-    if (!body.trim()) return alert('Введите текст вопроса')
-    setSaving(true)
+    if (!topicId) { setError('Выберите или создайте тему'); return }
+    if (!body.trim()) { setError('Введите текст вопроса'); return }
+    setSaving(true); setError('')
     try {
       const payload = {
-        topic_id: topicId,
-        question_type: qtype,
-        difficulty,
-        body: body.trim(),
-        image_url: imageUrl,
+        topic_id: topicId, question_type: qtype, difficulty,
+        body: body.trim(), image_url: imageUrl,
         explanation: explanation.trim() || null,
-        score_max: scoreMax,
-        options: buildOptions(),
-        is_active: true,
+        score_max: scoreMax, options: buildOptions(), is_active: true,
       }
       if (initial?.id) {
         await client.patch(`/questions/${initial.id}`, payload)
       } else {
         const { data } = await client.post<{ id: number }>('/questions', payload)
-        await client.post(`/tests/${testId}/questions`, {
-          question_id: data.id,
-          order_num: 99,
-          score_max: scoreMax,
-        })
+        await client.post(`/tests/${testId}/questions`, { question_id: data.id, order_num: 99, score_max: scoreMax })
       }
       onSave()
-    } finally { setSaving(false) }
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(msg ?? 'Ошибка сохранения')
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center overflow-y-auto py-8">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-800">
-            {initial ? 'Редактировать вопрос' : 'Новый вопрос'}
-          </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
-        </div>
-
-        <div className="p-6 space-y-5 overflow-y-auto">
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth scroll="paper">
+      <DialogTitle>{initial ? 'Редактировать вопрос' : 'Новый вопрос'}</DialogTitle>
+      <DialogContent dividers>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           {/* Topic */}
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Тема</label>
-            {topics.length > 0 ? (
-              <select value={topicId} onChange={e => setTopicId(Number(e.target.value))}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {topics.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
-              </select>
-            ) : (
-              <p className="text-sm text-slate-400 mb-2">Тем нет — создайте первую:</p>
+          <Box>
+            <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>Тема</Typography>
+            {topics.length > 0 && (
+              <TextField select fullWidth size="small" value={topicId} onChange={e => setTopicId(Number(e.target.value))} sx={{ mb: 1 }}>
+                {topics.map(t => <MenuItem key={t.id} value={t.id}>{t.title}</MenuItem>)}
+              </TextField>
             )}
-            <div className="flex gap-2 mt-2">
-              <input value={newTopicTitle} onChange={e => setNewTopicTitle(e.target.value)}
-                placeholder="Название новой темы..."
-                className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-              <button type="button" onClick={createTopic} disabled={creatingTopic || !newTopicTitle.trim()}
-                className="text-sm px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg disabled:opacity-50">
+            {topics.length === 0 && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Тем нет — создайте первую:</Typography>
+            )}
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                size="small" value={newTopicTitle} onChange={e => setNewTopicTitle(e.target.value)}
+                placeholder="Название новой темы..." sx={{ flex: 1 }}
+              />
+              <Button size="small" variant="outlined" onClick={createTopic} disabled={creatingTopic || !newTopicTitle.trim()}>
                 Создать
-              </button>
-            </div>
-          </div>
+              </Button>
+            </Box>
+          </Box>
 
           {/* Type + Difficulty + Score */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Тип</label>
-              <select value={qtype} onChange={e => setQtype(e.target.value as QType)}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {QTYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Сложность</label>
-              <select value={difficulty} onChange={e => setDifficulty(e.target.value)}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                {DIFFICULTIES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Баллы</label>
-              <input type="number" min={0.5} max={100} step={0.5} value={scoreMax}
-                onChange={e => setScoreMax(Number(e.target.value))}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-          </div>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+            <TextField select label="Тип" size="small" value={qtype} onChange={e => setQtype(e.target.value as QType)}>
+              {QTYPES.map(t => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+            </TextField>
+            <TextField select label="Сложность" size="small" value={difficulty} onChange={e => setDifficulty(e.target.value)}>
+              {DIFFICULTIES.map(d => <MenuItem key={d.value} value={d.value}>{d.label}</MenuItem>)}
+            </TextField>
+            <TextField label="Баллы" size="small" type="number" value={scoreMax}
+              onChange={e => setScoreMax(Number(e.target.value))}
+              inputProps={{ min: 0.5, max: 100, step: 0.5 }} />
+          </Box>
 
           {/* Body */}
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Текст вопроса</label>
-            <textarea value={body} onChange={e => setBody(e.target.value)} rows={3}
-              placeholder="Введите текст вопроса..."
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+          <Box>
+            <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>Текст вопроса</Typography>
+            <TextField fullWidth multiline rows={3} size="small" value={body}
+              onChange={e => setBody(e.target.value)} placeholder="Введите текст вопроса..." />
             <ImageUploadBtn url={imageUrl} onChange={setImageUrl} />
-          </div>
+          </Box>
 
-          {/* Type-specific editor */}
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-2">
+          {/* Type-specific */}
+          <Box>
+            <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ display: 'block', mb: 1 }}>
               {qtype === 'matching' ? 'Элементы и пары' : 'Варианты ответа'}
-            </label>
-
+            </Typography>
             {(qtype === 'single_choice' || qtype === 'multiple_choice') && (
-              <ChoicesEditor
-                type={qtype} choices={choices} correct={correct}
-                onChange={(c, cr) => { setChoices(c); setCorrect(cr) }}
-              />
+              <ChoicesEditor type={qtype} choices={choices} correct={correct}
+                onChange={(c, cr) => { setChoices(c); setCorrect(cr) }} />
             )}
-
             {qtype === 'text_input' && (
-              <div className="space-y-2">
-                <p className="text-xs text-slate-400">Перечислите все допустимые формулировки правильного ответа (регистр не важен):</p>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Перечислите все допустимые формулировки правильного ответа (регистр не важен):
+                </Typography>
                 {correctTexts.map((t, i) => (
-                  <div key={i} className="flex gap-2">
-                    <input value={t} onChange={e => {
-                      const a = [...correctTexts]; a[i] = e.target.value; setCorrectTexts(a)
-                    }}
+                  <Box key={i} sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                      fullWidth size="small" value={t}
+                      onChange={e => { const a = [...correctTexts]; a[i] = e.target.value; setCorrectTexts(a) }}
                       placeholder={`Вариант ответа ${i + 1}...`}
-                      className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    />
                     {correctTexts.length > 1 && (
-                      <button type="button" onClick={() => setCorrectTexts(correctTexts.filter((_, j) => j !== i))}
-                        className="text-slate-300 hover:text-red-500 text-xl">&times;</button>
+                      <IconButton size="small" onClick={() => setCorrectTexts(correctTexts.filter((_, j) => j !== i))}
+                        sx={{ color: 'text.disabled', '&:hover': { color: 'error.main' } }}>
+                        <DeleteOutlineRounded sx={{ fontSize: 18 }} />
+                      </IconButton>
                     )}
-                  </div>
+                  </Box>
                 ))}
-                <button type="button" onClick={() => setCorrectTexts([...correctTexts, ''])}
-                  className="text-sm text-blue-600 hover:underline">+ Добавить вариант</button>
-              </div>
+                <Button size="small" startIcon={<AddRounded />} onClick={() => setCorrectTexts([...correctTexts, ''])} sx={{ alignSelf: 'flex-start' }}>
+                  Добавить вариант
+                </Button>
+              </Box>
             )}
-
             {qtype === 'matching' && (
               <MatchingEditor
                 left={matchLeft} right={matchRight} correct={matchCorrect}
                 onChange={(l, r, c) => { setMatchLeft(l); setMatchRight(r); setMatchCorrect(c) }}
               />
             )}
-          </div>
+          </Box>
 
           {/* Explanation */}
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Пояснение (показывается после ответа)</label>
-            <textarea value={explanation} onChange={e => setExplanation(e.target.value)} rows={2}
-              placeholder="Необязательно..."
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-          </div>
-        </div>
+          <Box>
+            <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+              Пояснение (показывается после ответа)
+            </Typography>
+            <TextField fullWidth multiline rows={2} size="small" value={explanation}
+              onChange={e => setExplanation(e.target.value)} placeholder="Необязательно..." />
+          </Box>
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
-          <button onClick={onClose}
-            className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg border border-slate-200">
-            Отмена
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
-            {saving ? 'Сохранение...' : 'Сохранить'}
-          </button>
-        </div>
-      </div>
-    </div>
+          {error && <Alert severity="error">{error}</Alert>}
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button color="inherit" onClick={onClose}>Отмена</Button>
+        <Button variant="contained" disabled={saving} onClick={handleSave}>
+          {saving ? 'Сохранение...' : 'Сохранить'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   )
 }
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
-
-const STATUS_BADGE: Record<string, string> = {
-  draft: 'bg-slate-100 text-slate-500',
-  published: 'bg-emerald-100 text-emerald-700',
-  archived: 'bg-amber-100 text-amber-700',
-}
-const STATUS_LABEL: Record<string, string> = {
-  draft: 'Черновик', published: 'Опубликован', archived: 'Архив',
-}
-const QTYPE_LABEL: Record<string, string> = {
-  single_choice: 'Один',
-  multiple_choice: 'Несколько',
-  text_input: 'Текст',
-  matching: 'Соответствие',
-}
-const DIFF_BADGE: Record<string, string> = {
-  easy: 'bg-green-100 text-green-600',
-  medium: 'bg-amber-100 text-amber-600',
-  hard: 'bg-red-100 text-red-600',
-}
 
 export default function TestEditorPage() {
   const { id } = useParams<{ id: string }>()
@@ -519,20 +465,16 @@ export default function TestEditorPage() {
   const [questions, setQuestions] = useState<TQOut[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [groups, setGroups] = useState<Group[]>([])
-  // Группы, у которых преподаватель ведёт предмет этого теста
   const [allowedGroupIds, setAllowedGroupIds] = useState<Set<number>>(new Set())
   const [assignments, setAssignments] = useState<TestAssignment[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'settings' | 'questions' | 'assign'>('settings')
+  const [tab, setTab] = useState(0) // 0=settings 1=questions 2=assign
   const [modal, setModal] = useState<TQOut | null | 'new'>(null)
   const [saving, setSaving] = useState(false)
 
-  // Студенты по группам для персонального назначения
   const [groupStudents, setGroupStudents] = useState<Record<number, { id: number; first_name: string; last_name: string; middle_name: string | null }[]>>({})
   const [newStudentAssign, setNewStudentAssign] = useState<{ groupId: number | null; studentId: number | null; from: string; to: string }>({ groupId: null, studentId: null, from: '', to: '' })
   const [assigningStudent, setAssigningStudent] = useState(false)
-
-  // Settings form state
   const [form, setForm] = useState<Partial<TestOut>>({})
 
   useEffect(() => {
@@ -542,13 +484,10 @@ export default function TestEditorPage() {
       client.get<TestAssignment[]>(`/tests/${testId}/assignments`).then(r => r.data),
       getSubjects(),
       getGroups(),
-      getMyTeacherProfile()
-        .then(t => getAssignments(t.id))
-        .catch(() => [] as TeachingAssignment[]),
+      getMyTeacherProfile().then(t => getAssignments(t.id)).catch(() => [] as TeachingAssignment[]),
     ]).then(([t, qs, ta, subs, grps, myAsgns]) => {
       setTest(t); setForm(t); setQuestions(qs); setAssignments(ta)
       setSubjects(subs); setGroups(grps)
-      // Группы, у которых преподаватель ведёт предмет теста
       const ids = new Set(
         myAsgns
           .filter((a: TeachingAssignment) => a.subject_id === t.subject_id)
@@ -586,30 +525,22 @@ export default function TestEditorPage() {
     const idx = questions.findIndex(q => q.tq_id === tq.tq_id)
     const other = questions[idx + dir]
     if (!other) return
-    await Promise.all([
-      client.patch(`/questions/${tq.id}`, {}), // just to trigger; order via tq
-    ])
-    // swap order_num via PATCH test question — simpler: just reorder client-side + re-post
     const newOrder = [...questions]
     newOrder[idx] = { ...other }
     newOrder[idx + dir] = { ...tq }
     setQuestions(newOrder)
   }
 
-  // Загружаем студентов по группам при переходе на вкладку назначений
   useEffect(() => {
-    if (tab !== 'assign' || allowedGroupIds.size === 0) return
+    if (tab !== 2 || allowedGroupIds.size === 0) return
     for (const gid of allowedGroupIds) {
       if (groupStudents[gid]) continue
       client.get<{ id: number; first_name: string; last_name: string; middle_name: string | null }[]>(
         '/students', { params: { group_id: gid } }
-      ).then(r => {
-        setGroupStudents(prev => ({ ...prev, [gid]: r.data }))
-      })
+      ).then(r => { setGroupStudents(prev => ({ ...prev, [gid]: r.data })) })
     }
-  }, [tab, allowedGroupIds])
+  }, [tab, allowedGroupIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Assign tab
   const assignedGroupIds = new Set(assignments.filter(a => a.student_id == null).map(a => a.group_id))
   const studentAssignments = assignments.filter(a => a.student_id != null)
   const [assignDates, setAssignDates] = useState<Record<number, { from: string; to: string }>>({})
@@ -622,11 +553,8 @@ export default function TestEditorPage() {
     } else {
       const dates = assignDates[groupId]
       const { data } = await client.post<TestAssignment>(`/tests/${testId}/assign`, {
-        test_id: testId,
-        group_id: groupId,
-        student_id: null,
-        available_from: dates?.from || null,
-        available_to: dates?.to || null,
+        test_id: testId, group_id: groupId, student_id: null,
+        available_from: dates?.from || null, available_to: dates?.to || null,
       })
       setAssignments(a => [...a, data])
     }
@@ -638,351 +566,338 @@ export default function TestEditorPage() {
     setAssigningStudent(true)
     try {
       const { data } = await client.post<TestAssignment>(`/tests/${testId}/assign`, {
-        test_id: testId,
-        group_id: groupId,
-        student_id: studentId,
-        available_from: from || null,
-        available_to: to || null,
+        test_id: testId, group_id: groupId, student_id: studentId,
+        available_from: from || null, available_to: to || null,
       })
       setAssignments(a => [...a, data])
       setNewStudentAssign({ groupId, studentId: null, from: '', to: '' })
     } catch (err: any) {
       alert(err?.response?.data?.detail ?? 'Ошибка назначения')
-    } finally {
-      setAssigningStudent(false)
-    }
+    } finally { setAssigningStudent(false) }
   }
 
-  if (loading || !test) return <Spinner />
+  if (loading || !test) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
 
   const subjectName = subjects.find(s => s.id === test.subject_id)?.name ?? '—'
   const totalScore = questions.reduce((s, q) => s + q.score_max, 0)
 
   return (
-    <div className="p-8 max-w-4xl">
+    <Box sx={{ p: 4, maxWidth: 900 }}>
       {/* Header */}
-      <div className="flex items-start gap-4 mb-6">
-        <button onClick={() => navigate('/tests')} className="mt-1 text-slate-400 hover:text-slate-600">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-        </button>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-1">
-            <h1 className="text-2xl font-semibold text-slate-800 truncate">{test.title}</h1>
-            <span className={`shrink-0 px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_BADGE[test.status]}`}>
-              {STATUS_LABEL[test.status]}
-            </span>
-          </div>
-          <p className="text-sm text-slate-400">{subjectName} · {questions.length} вопросов · {totalScore.toFixed(1)} баллов</p>
-        </div>
-        <div className="flex gap-2 shrink-0">
-          {STATUS_ACTIONS.map(a => a.value !== test.status && (
-            <button key={a.value} onClick={() => setStatus(a.value)}
-              className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${a.cls}`}>
-              {a.label}
-            </button>
-          ))}
-          <button
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, mb: 3 }}>
+        <IconButton onClick={() => navigate('/tests')} sx={{ mt: 0.5, color: 'text.secondary' }}>
+          <ArrowBackRounded />
+        </IconButton>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5, flexWrap: 'wrap' }}>
+            <Typography variant="h5" fontWeight={700} sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{test.title}</Typography>
+            <Chip label={STATUS_LABEL[test.status]} size="small" sx={STATUS_SX[test.status]} />
+          </Box>
+          <Typography variant="body2" color="text.secondary">
+            {subjectName} · {questions.length} вопросов · {totalScore.toFixed(1)} баллов
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, flexWrap: 'wrap' }}>
+          {(['draft', 'published', 'archived'] as const).filter(s => s !== test.status).map(s => {
+            const labels: Record<string, string> = { draft: 'Черновик', published: 'Опубликовать', archived: 'В архив' }
+            const sxMap: Record<string, object> = {
+              draft: { bgcolor: '#F1F5F9', color: '#475569', '&:hover': { bgcolor: '#E2E8F0' } },
+              published: { bgcolor: '#059669', color: 'white', '&:hover': { bgcolor: '#047857' } },
+              archived: { bgcolor: '#FEF3C7', color: '#92400E', '&:hover': { bgcolor: '#FDE68A' } },
+            }
+            return (
+              <Button key={s} size="small" onClick={() => setStatus(s)} sx={{ borderRadius: 1.5, ...sxMap[s] }}>
+                {labels[s]}
+              </Button>
+            )
+          })}
+          <Button
+            size="small"
             onClick={async () => {
               if (!confirm('Удалить тест? Это действие нельзя отменить.')) return
-              try {
-                await client.delete(`/tests/${testId}`)
-                navigate('/tests')
-              } catch (err: any) {
-                alert(err?.response?.data?.detail ?? 'Ошибка удаления')
-              }
+              try { await client.delete(`/tests/${testId}`); navigate('/tests') }
+              catch (err: any) { alert(err?.response?.data?.detail ?? 'Ошибка удаления') }
             }}
-            className="px-3 py-1.5 text-sm rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+            sx={{ bgcolor: '#FEF2F2', color: 'error.main', '&:hover': { bgcolor: '#FEE2E2' }, borderRadius: 1.5 }}
           >
             Удалить
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Box>
+      </Box>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-slate-200">
-        {(['settings', 'questions', 'assign'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === t ? 'border-blue-500 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}>
-            {t === 'settings' ? 'Настройки' : t === 'questions' ? `Вопросы (${questions.length})` : 'Назначение'}
-          </button>
-        ))}
-      </div>
+      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+        <Tab label="Настройки" />
+        <Tab label={`Вопросы (${questions.length})`} />
+        <Tab label="Назначение" />
+      </Tabs>
 
       {/* ── Settings tab ── */}
-      {tab === 'settings' && (
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6 space-y-5">
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Название</label>
-            <input value={form.title ?? ''} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Описание</label>
-            <textarea value={form.description ?? ''} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              rows={3} className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Лимит времени (мин)</label>
-              <input type="number" min={1} value={form.time_limit_minutes ?? ''}
+      {tab === 0 && (
+        <Paper elevation={1} sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <TextField label="Название" fullWidth size="small" value={form.title ?? ''}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
+            <TextField label="Описание" fullWidth multiline rows={3} size="small" value={form.description ?? ''}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+              <TextField label="Лимит времени (мин)" size="small" type="number"
+                value={form.time_limit_minutes ?? ''}
                 onChange={e => setForm(f => ({ ...f, time_limit_minutes: e.target.value ? Number(e.target.value) : null }))}
-                placeholder="Без ограничений"
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Попыток</label>
-              <input type="number" min={1} max={99} value={form.attempts_allowed ?? 1}
+                placeholder="Без ограничений" />
+              <TextField label="Попыток" size="small" type="number" value={form.attempts_allowed ?? 1}
                 onChange={e => setForm(f => ({ ...f, attempts_allowed: Number(e.target.value) }))}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Порог сдачи (%)</label>
-              <input type="number" min={0} max={100} value={form.passing_score_pct ?? 60}
+                inputProps={{ min: 1, max: 99 }} />
+              <TextField label="Порог сдачи (%)" size="small" type="number" value={form.passing_score_pct ?? 60}
                 onChange={e => setForm(f => ({ ...f, passing_score_pct: Number(e.target.value) }))}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Доступен с</label>
-              <input type="datetime-local" value={form.available_from?.slice(0, 16) ?? ''}
+                inputProps={{ min: 0, max: 100 }} />
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+              <TextField label="Доступен с" size="small" type="datetime-local"
+                value={form.available_from?.slice(0, 16) ?? ''}
                 onChange={e => setForm(f => ({ ...f, available_from: e.target.value || null }))}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Доступен до</label>
-              <input type="datetime-local" value={form.available_to?.slice(0, 16) ?? ''}
+                InputLabelProps={{ shrink: true }} />
+              <TextField label="Доступен до" size="small" type="datetime-local"
+                value={form.available_to?.slice(0, 16) ?? ''}
                 onChange={e => setForm(f => ({ ...f, available_to: e.target.value || null }))}
-                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-          </div>
-          <div className="flex gap-6">
-            {[
-              { key: 'shuffle_questions', label: 'Перемешивать вопросы' },
-              { key: 'shuffle_options', label: 'Перемешивать варианты' },
-              { key: 'show_results', label: 'Показывать результаты' },
-            ].map(({ key, label }) => (
-              <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-                <input type="checkbox" checked={!!(form as any)[key]}
-                  onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))}
-                  className="accent-blue-600" />
-                <span className="text-sm text-slate-700">{label}</span>
-              </label>
-            ))}
-          </div>
-          <div className="flex justify-end">
-            <button onClick={saveSettings} disabled={saving}
-              className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50">
-              {saving ? 'Сохранение...' : 'Сохранить настройки'}
-            </button>
-          </div>
-        </div>
+                InputLabelProps={{ shrink: true }} />
+            </Box>
+            <Box sx={{ display: 'flex', gap: 3 }}>
+              {[
+                { key: 'shuffle_questions', label: 'Перемешивать вопросы' },
+                { key: 'shuffle_options',   label: 'Перемешивать варианты' },
+                { key: 'show_results',      label: 'Показывать результаты' },
+              ].map(({ key, label }) => (
+                <FormControlLabel
+                  key={key}
+                  control={
+                    <Checkbox
+                      size="small"
+                      checked={!!(form as any)[key]}
+                      onChange={e => setForm(f => ({ ...f, [key]: e.target.checked }))}
+                    />
+                  }
+                  label={<Typography variant="body2">{label}</Typography>}
+                />
+              ))}
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button variant="contained" disabled={saving} onClick={saveSettings}>
+                {saving ? 'Сохранение...' : 'Сохранить настройки'}
+              </Button>
+            </Box>
+          </Box>
+        </Paper>
       )}
 
       {/* ── Questions tab ── */}
-      {tab === 'questions' && (
-        <div className="space-y-3">
+      {tab === 1 && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {questions.length === 0 && (
-            <div className="bg-white rounded-xl border border-slate-100 p-12 text-center text-slate-400 shadow-sm">
-              Вопросов пока нет
-            </div>
+            <Paper sx={{ p: 8, textAlign: 'center' }}><Typography color="text.secondary">Вопросов пока нет</Typography></Paper>
           )}
           {questions.map((q, i) => (
-            <div key={q.tq_id} className="bg-white rounded-xl border border-slate-100 shadow-sm px-5 py-4 flex items-start gap-4">
-              {/* Order */}
-              <div className="flex flex-col items-center gap-1 shrink-0 pt-0.5">
-                <button onClick={() => moveQuestion(q, -1)} disabled={i === 0}
-                  className="text-slate-300 hover:text-slate-600 disabled:opacity-20 text-xs">▲</button>
-                <span className="text-sm font-semibold text-slate-400 w-5 text-center">{i + 1}</span>
-                <button onClick={() => moveQuestion(q, 1)} disabled={i === questions.length - 1}
-                  className="text-slate-300 hover:text-slate-600 disabled:opacity-20 text-xs">▼</button>
-              </div>
+            <Paper key={q.tq_id} elevation={1} sx={{ px: 2.5, py: 2, display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+              {/* Order controls */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0, flexShrink: 0, pt: 0.25 }}>
+                <IconButton size="small" disabled={i === 0} onClick={() => moveQuestion(q, -1)} sx={{ p: 0, color: 'text.disabled' }}>
+                  <KeyboardArrowUpRounded sx={{ fontSize: 16 }} />
+                </IconButton>
+                <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ width: 20, textAlign: 'center' }}>{i + 1}</Typography>
+                <IconButton size="small" disabled={i === questions.length - 1} onClick={() => moveQuestion(q, 1)} sx={{ p: 0, color: 'text.disabled' }}>
+                  <KeyboardArrowDownRounded sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Box>
               {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-medium">
-                    {QTYPE_LABEL[q.question_type] ?? q.question_type}
-                  </span>
-                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${DIFF_BADGE[q.difficulty]}`}>
-                    {q.difficulty}
-                  </span>
-                  <span className="text-xs text-slate-400">{q.score_max} б.</span>
-                </div>
-                {q.image_url && <img src={q.image_url} alt="" className="h-12 rounded mb-1 object-cover" />}
-                <p className="text-sm text-slate-700 line-clamp-2">{q.body}</p>
-              </div>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75, flexWrap: 'wrap' }}>
+                  <Chip label={QTYPE_LABEL[q.question_type] ?? q.question_type} size="small" sx={{ bgcolor: '#DBEAFE', color: '#1D4ED8', fontWeight: 600 }} />
+                  <Chip label={q.difficulty} size="small" sx={DIFF_SX[q.difficulty] ?? { bgcolor: '#F1F5F9', color: '#64748b' }} />
+                  <Typography variant="caption" color="text.disabled">{q.score_max} б.</Typography>
+                </Box>
+                {q.image_url && <Box component="img" src={q.image_url} alt="" sx={{ height: 48, borderRadius: 1, mb: 0.75, objectFit: 'cover' }} />}
+                <Typography variant="body2" sx={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                  {q.body}
+                </Typography>
+              </Box>
               {/* Actions */}
-              <div className="flex gap-2 shrink-0">
-                <button onClick={() => setModal(q)}
-                  className="text-sm px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600">
+              <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+                <Button size="small" variant="outlined" onClick={() => setModal(q)} sx={{ borderColor: 'divider', color: 'text.primary' }}>
                   Изменить
-                </button>
-                <button onClick={() => deleteQuestion(q)}
-                  className="text-sm px-3 py-1.5 border border-red-100 rounded-lg hover:bg-red-50 text-red-500">
+                </Button>
+                <Button size="small" variant="outlined" color="error" onClick={() => deleteQuestion(q)} sx={{ borderColor: '#FCA5A5' }}>
                   Удалить
-                </button>
-              </div>
-            </div>
+                </Button>
+              </Box>
+            </Paper>
           ))}
-          <button onClick={() => setModal('new')}
-            className="w-full py-3 border-2 border-dashed border-blue-200 rounded-xl text-sm text-blue-500 hover:border-blue-400 hover:bg-blue-50 transition-colors">
-            + Добавить вопрос
-          </button>
-        </div>
+          <Button
+            fullWidth variant="outlined" startIcon={<AddRounded />} onClick={() => setModal('new')}
+            sx={{ borderStyle: 'dashed', py: 1.5, color: 'primary.main', borderColor: '#BFDBFE', '&:hover': { borderColor: 'primary.main', bgcolor: '#EFF6FF' } }}
+          >
+            Добавить вопрос
+          </Button>
+        </Box>
       )}
 
       {/* ── Assign tab ── */}
-      {tab === 'assign' && (
-        <div className="space-y-4">
-
-          {/* Секция: по группе */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100">
-              <h3 className="text-sm font-semibold text-slate-700">По группе</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Доступ получат все студенты группы</p>
-            </div>
+      {tab === 2 && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* By group */}
+          <Paper elevation={2} sx={{ overflow: 'hidden' }}>
+            <Box sx={{ px: 3, py: 2, borderBottom: 1, borderColor: 'divider' }}>
+              <Typography variant="subtitle2" fontWeight={600}>По группе</Typography>
+              <Typography variant="caption" color="text.secondary">Доступ получат все студенты группы</Typography>
+            </Box>
             {allowedGroupIds.size === 0 ? (
-              <div className="px-6 py-8 text-center text-slate-400 text-sm">
-                Нет групп, которым вы ведёте этот предмет
-              </div>
+              <Box sx={{ px: 3, py: 4, textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary">Нет групп, которым вы ведёте этот предмет</Typography>
+              </Box>
             ) : (
-              <div className="divide-y divide-slate-50">
-                {groups.filter(g => allowedGroupIds.has(g.id)).map(g => {
-                  const isAssigned = assignedGroupIds.has(g.id)
-                  return (
-                    <div key={g.id} className="px-6 py-4 flex items-center gap-4">
-                      <input type="checkbox" checked={isAssigned}
-                        onChange={() => toggleAssign(g.id)}
-                        className="accent-blue-600 w-4 h-4 shrink-0" />
-                      <span className="text-sm font-medium text-slate-800 w-32 shrink-0">{g.name}</span>
-                      <div className="flex items-center gap-2 flex-1">
-                        <input type="datetime-local"
-                          value={assignDates[g.id]?.from ?? ''}
-                          onChange={e => setAssignDates(d => ({ ...d, [g.id]: { ...d[g.id], from: e.target.value } }))}
-                          className="text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                        <span className="text-slate-400 text-xs">—</span>
-                        <input type="datetime-local"
-                          value={assignDates[g.id]?.to ?? ''}
-                          onChange={e => setAssignDates(d => ({ ...d, [g.id]: { ...d[g.id], to: e.target.value } }))}
-                          className="text-xs border border-slate-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                      </div>
-                      {isAssigned && <span className="text-xs text-emerald-600 shrink-0">Выдан</span>}
-                    </div>
-                  )
-                })}
-              </div>
+              <Table size="small">
+                <TableBody>
+                  {groups.filter(g => allowedGroupIds.has(g.id)).map(g => {
+                    const isAssigned = assignedGroupIds.has(g.id)
+                    return (
+                      <TableRow key={g.id}>
+                        <TableCell sx={{ width: 40 }}>
+                          <Checkbox size="small" checked={isAssigned} onChange={() => toggleAssign(g.id)} />
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 500, width: 140 }}>{g.name}</TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                            <TextField
+                              size="small" type="datetime-local"
+                              value={assignDates[g.id]?.from ?? ''}
+                              onChange={e => setAssignDates(d => ({ ...d, [g.id]: { ...d[g.id], from: e.target.value } }))}
+                              InputLabelProps={{ shrink: true }} sx={{ '& input': { fontSize: 12 } }}
+                            />
+                            <Typography color="text.disabled">—</Typography>
+                            <TextField
+                              size="small" type="datetime-local"
+                              value={assignDates[g.id]?.to ?? ''}
+                              onChange={e => setAssignDates(d => ({ ...d, [g.id]: { ...d[g.id], to: e.target.value } }))}
+                              InputLabelProps={{ shrink: true }} sx={{ '& input': { fontSize: 12 } }}
+                            />
+                          </Box>
+                        </TableCell>
+                        <TableCell sx={{ width: 80 }}>
+                          {isAssigned && <Chip label="Выдан" size="small" sx={{ bgcolor: '#D1FAE5', color: '#065F46' }} />}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
             )}
-          </div>
+          </Paper>
 
-          {/* Секция: персонально студенту */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100">
-              <h3 className="text-sm font-semibold text-slate-700">Персонально студенту</h3>
-              <p className="text-xs text-slate-400 mt-0.5">Переопределяет групповое назначение для конкретного студента</p>
-            </div>
+          {/* Personally to student */}
+          <Paper elevation={2} sx={{ overflow: 'hidden' }}>
+            <Box sx={{ px: 3, py: 2, borderBottom: 1, borderColor: 'divider' }}>
+              <Typography variant="subtitle2" fontWeight={600}>Персонально студенту</Typography>
+              <Typography variant="caption" color="text.secondary">Переопределяет групповое назначение для конкретного студента</Typography>
+            </Box>
 
-            {/* Форма нового персонального назначения */}
             {allowedGroupIds.size > 0 && (
-              <div className="px-6 py-4 border-b border-slate-50 flex flex-wrap items-end gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400">Группа</label>
-                  <select
-                    value={newStudentAssign.groupId ?? ''}
+              <Box sx={{ px: 3, py: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 2 }}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Группа</Typography>
+                  <Select
+                    size="small" value={newStudentAssign.groupId ?? ''}
                     onChange={e => setNewStudentAssign(s => ({ ...s, groupId: Number(e.target.value), studentId: null }))}
-                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                    displayEmpty sx={{ minWidth: 140, fontSize: 14 }}
                   >
-                    <option value="">Выберите группу</option>
+                    <MenuItem value=""><em>Выберите группу</em></MenuItem>
                     {groups.filter(g => allowedGroupIds.has(g.id)).map(g => (
-                      <option key={g.id} value={g.id}>{g.name}</option>
+                      <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>
                     ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400">Студент</label>
-                  <select
-                    value={newStudentAssign.studentId ?? ''}
+                  </Select>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Студент</Typography>
+                  <Select
+                    size="small" value={newStudentAssign.studentId ?? ''}
                     onChange={e => setNewStudentAssign(s => ({ ...s, studentId: Number(e.target.value) }))}
                     disabled={!newStudentAssign.groupId}
-                    className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:opacity-50"
+                    displayEmpty sx={{ minWidth: 180, fontSize: 14 }}
                   >
-                    <option value="">Выберите студента</option>
+                    <MenuItem value=""><em>Выберите студента</em></MenuItem>
                     {(newStudentAssign.groupId ? groupStudents[newStudentAssign.groupId] ?? [] : []).map(s => (
-                      <option key={s.id} value={s.id}>
+                      <MenuItem key={s.id} value={s.id}>
                         {s.last_name} {s.first_name}{s.middle_name ? ` ${s.middle_name}` : ''}
-                      </option>
+                      </MenuItem>
                     ))}
-                  </select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400">Доступен с</label>
-                  <input type="datetime-local"
-                    value={newStudentAssign.from}
+                  </Select>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Доступен с</Typography>
+                  <TextField size="small" type="datetime-local" value={newStudentAssign.from}
                     onChange={e => setNewStudentAssign(s => ({ ...s, from: e.target.value }))}
-                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs text-slate-400">Доступен до</label>
-                  <input type="datetime-local"
-                    value={newStudentAssign.to}
+                    InputLabelProps={{ shrink: true }} sx={{ '& input': { fontSize: 12 } }} />
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>Доступен до</Typography>
+                  <TextField size="small" type="datetime-local" value={newStudentAssign.to}
                     onChange={e => setNewStudentAssign(s => ({ ...s, to: e.target.value }))}
-                    className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-                </div>
-                <button
-                  onClick={assignToStudent}
+                    InputLabelProps={{ shrink: true }} sx={{ '& input': { fontSize: 12 } }} />
+                </Box>
+                <Button
+                  variant="contained" size="small"
                   disabled={!newStudentAssign.groupId || !newStudentAssign.studentId || assigningStudent}
-                  className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                  onClick={assignToStudent}
                 >
                   {assigningStudent ? 'Выдача...' : 'Выдать'}
-                </button>
-              </div>
+                </Button>
+              </Box>
             )}
 
-            {/* Список персональных назначений */}
             {studentAssignments.length === 0 ? (
-              <div className="px-6 py-5 text-center text-slate-400 text-sm">Персональных назначений нет</div>
+              <Box sx={{ px: 3, py: 4, textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary">Персональных назначений нет</Typography>
+              </Box>
             ) : (
-              <div className="divide-y divide-slate-50">
-                {studentAssignments.map(sa => {
-                  const grp = groups.find(g => g.id === sa.group_id)
-                  const students = groupStudents[sa.group_id] ?? []
-                  const st = students.find(s => s.id === sa.student_id)
-                  const stName = st
-                    ? `${st.last_name} ${st.first_name}${st.middle_name ? ` ${st.middle_name}` : ''}`
-                    : `Студент #${sa.student_id}`
-                  return (
-                    <div key={sa.id} className="px-6 py-3 flex items-center gap-4 text-sm">
-                      <div className="flex-1">
-                        <span className="font-medium text-slate-800">{stName}</span>
-                        <span className="text-xs text-slate-400 ml-2">{grp?.name ?? `Группа ${sa.group_id}`}</span>
-                        {(sa.available_from || sa.available_to) && (
-                          <span className="text-xs text-slate-400 ml-2">
-                            {sa.available_from ? new Date(sa.available_from).toLocaleDateString('ru') : ''}
-                            {sa.available_from && sa.available_to ? ' — ' : ''}
-                            {sa.available_to ? new Date(sa.available_to).toLocaleDateString('ru') : ''}
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={async () => {
-                          await client.delete(`/tests/${testId}/assignments/${sa.id}`)
-                          setAssignments(a => a.filter(x => x.id !== sa.id))
-                        }}
-                        className="text-xs text-red-400 hover:text-red-600"
-                      >
-                        Удалить
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
+              <Table size="small">
+                <TableBody>
+                  {studentAssignments.map(sa => {
+                    const grp = groups.find(g => g.id === sa.group_id)
+                    const students = groupStudents[sa.group_id] ?? []
+                    const st = students.find(s => s.id === sa.student_id)
+                    const stName = st
+                      ? `${st.last_name} ${st.first_name}${st.middle_name ? ` ${st.middle_name}` : ''}`
+                      : `Студент #${sa.student_id}`
+                    return (
+                      <TableRow key={sa.id}>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={500}>{stName}</Typography>
+                          <Typography variant="caption" color="text.disabled">
+                            {grp?.name ?? `Группа ${sa.group_id}`}
+                            {(sa.available_from || sa.available_to) && (
+                              <span>
+                                {' · '}
+                                {sa.available_from ? new Date(sa.available_from).toLocaleDateString('ru') : ''}
+                                {sa.available_from && sa.available_to ? ' — ' : ''}
+                                {sa.available_to ? new Date(sa.available_to).toLocaleDateString('ru') : ''}
+                              </span>
+                            )}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right">
+                          <Button size="small" color="error" onClick={async () => {
+                            await client.delete(`/tests/${testId}/assignments/${sa.id}`)
+                            setAssignments(a => a.filter(x => x.id !== sa.id))
+                          }}>
+                            Удалить
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
             )}
-          </div>
-
-        </div>
+          </Paper>
+        </Box>
       )}
 
       {/* Question modal */}
@@ -995,10 +910,6 @@ export default function TestEditorPage() {
           onClose={() => setModal(null)}
         />
       )}
-    </div>
+    </Box>
   )
-}
-
-function Spinner() {
-  return <div className="p-8 flex items-center gap-3 text-slate-400"><div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />Загрузка...</div>
 }

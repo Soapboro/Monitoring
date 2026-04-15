@@ -34,7 +34,8 @@ const ROLE_NAV: Record<string, NavItem[]> = {
     { to: '/grades',     label: 'Оценки',        icon: <GradeRounded fontSize="small" /> },
     { to: '/attendance', label: 'Посещаемость',  icon: <EventAvailableRounded fontSize="small" /> },
     { to: '/tests',      label: 'Тесты',         icon: <QuizRounded fontSize="small" /> },
-    { to: '/analytics',  label: 'Аналитика',     icon: <BarChartRounded fontSize="small" /> },
+    { to: '/analytics',      label: 'Аналитика',       icon: <BarChartRounded fontSize="small" /> },
+    { to: '/test-analytics', label: 'Аналитика тестов', icon: <QuizRounded fontSize="small" /> },
   ],
   student: [
     { to: '/dashboard',    label: 'Главная',       icon: <HomeRounded fontSize="small" /> },

@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import {
+  Box, Paper, Typography, Chip, CircularProgress, Breadcrumbs, Link,
+  Table, TableHead, TableBody, TableRow, TableCell,
+  Button, Dialog, DialogTitle, DialogContent, DialogActions,
+  TextField, Checkbox, FormControlLabel, Alert, IconButton, InputAdornment,
+} from '@mui/material'
+import { ChevronRightRounded, DeleteOutlineRounded, AddRounded, SearchRounded } from '@mui/icons-material'
 import client from '../../api/client'
 import type { Subject, Department, Group, TeacherProfile } from '../../api/resources'
 import { updateSubject, updateGroup, getAllTeachers, setTeacherDepartment } from '../../api/resources'
-import { Overlay, TrashIcon } from '../../components/CrudHelpers'
+import { WARM } from '../../theme'
 
 export default function DepartmentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -33,208 +40,201 @@ export default function DepartmentDetailPage() {
       setSubjects(subjs.sort((a, b) => a.name.localeCompare(b.name)))
       setGroups(allGroups.filter(g => g.department_id === d.id).sort((a, b) => a.name.localeCompare(b.name)))
       setTeachers(deptTeachers.sort((a, b) => a.last_name.localeCompare(b.last_name)))
-    } catch {
-      // silent
-    } finally {
-      setLoading(false)
-    }
+    } catch { /* silent */ }
+    finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [id])
+  useEffect(() => { load() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const removeSubject = async (subject: Subject) => {
-    await updateSubject(subject.id, { department_id: null })
-    load()
-  }
+  const removeSubject = async (subject: Subject) => { await updateSubject(subject.id, { department_id: null }); load() }
+  const removeGroup = async (group: Group) => { await updateGroup(group.id, { department_id: null }); load() }
+  const removeTeacher = async (teacher: TeacherProfile) => { await setTeacherDepartment(teacher.id, null); load() }
 
-  const removeGroup = async (group: Group) => {
-    await updateGroup(group.id, { department_id: null })
-    load()
-  }
-
-  const removeTeacher = async (teacher: TeacherProfile) => {
-    await setTeacherDepartment(teacher.id, null)
-    load()
-  }
-
-  if (loading) return <Spinner />
-  if (!dept) return <div className="p-8 text-slate-400">Кафедра не найдена</div>
+  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}><CircularProgress /></Box>
+  if (!dept) return <Typography sx={{ p: 4 }} color="text.secondary">Кафедра не найдена</Typography>
 
   return (
-    <div className="p-8 max-w-5xl">
-      <nav className="flex items-center gap-1.5 text-sm text-slate-400 mb-6">
-        <button onClick={() => navigate('/departments')} className="hover:text-blue-600 cursor-pointer transition-colors">
-          Кафедры
-        </button>
-        <Chevron />
-        <span className="text-slate-600 font-medium">{dept.name}</span>
-      </nav>
+    <Box sx={{ p: 4, maxWidth: 900 }}>
+      <Breadcrumbs separator={<ChevronRightRounded sx={{ fontSize: 14 }} />} sx={{ mb: 3, fontSize: 13 }}>
+        <Link underline="hover" sx={{ cursor: 'pointer' }} color="inherit" onClick={() => navigate('/departments')}>Кафедры</Link>
+        <Typography fontSize={13} color="text.primary" fontWeight={500}>{dept.name}</Typography>
+      </Breadcrumbs>
 
-      <div className="bg-white rounded-xl border border-slate-100 p-6 shadow-sm mb-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-800">{dept.name}</h1>
-            {dept.description && <p className="text-slate-400 text-sm mt-1">{dept.description}</p>}
-          </div>
+      {/* Header */}
+      <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+          <Box>
+            <Typography variant="h6" fontWeight={600}>{dept.name}</Typography>
+            {dept.description && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{dept.description}</Typography>}
+          </Box>
           {dept.code && (
-            <span className="text-sm bg-blue-50 text-blue-600 font-mono px-3 py-1 rounded-lg shrink-0">{dept.code}</span>
+            <Chip label={dept.code} size="small" sx={{ fontFamily: 'monospace', bgcolor: '#DBEAFE', color: '#1D4ED8', flexShrink: 0 }} />
           )}
-        </div>
-        <div className="grid grid-cols-3 gap-4 mt-5 pt-5 border-t border-slate-100">
-          <Stat label="Дисциплин" value={subjects.length} />
-          <Stat label="Групп" value={groups.length} />
-          <Stat label="Преподавателей" value={teachers.length} />
-        </div>
-      </div>
+        </Box>
 
-      <div className="space-y-6">
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, mt: 2.5, pt: 2.5, borderTop: 1, borderColor: 'divider' }}>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Дисциплин</Typography>
+            <Typography variant="h5" fontWeight={700} sx={{ color: WARM[800] }}>{subjects.length}</Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Групп</Typography>
+            <Typography variant="h5" fontWeight={700} sx={{ color: WARM[800] }}>{groups.length}</Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary">Преподавателей</Typography>
+            <Typography variant="h5" fontWeight={700} sx={{ color: WARM[800] }}>{teachers.length}</Typography>
+          </Box>
+        </Box>
+      </Paper>
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {/* Группы */}
-        <Section
-          title="Группы"
-          subtitle={`${groups.length}`}
-          onAdd={() => setAddGroupsOpen(true)}
-          addLabel="Добавить группу"
-        >
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+              <Typography variant="subtitle1" fontWeight={600}>Группы</Typography>
+              <Typography variant="caption" color="text.disabled">{groups.length}</Typography>
+            </Box>
+            <Button size="small" startIcon={<AddRounded />} onClick={() => setAddGroupsOpen(true)}>Добавить группу</Button>
+          </Box>
           {groups.length === 0 ? (
-            <Empty text="Групп нет" />
+            <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">Групп нет</Typography></Paper>
           ) : (
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="text-left px-6 py-3 text-slate-500 font-medium">Группа</th>
-                    <th className="text-left px-4 py-3 text-slate-500 font-medium">Набор</th>
-                    <th className="text-left px-4 py-3 text-slate-500 font-medium">Статус</th>
-                    <th className="px-6 py-3" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
+            <Paper elevation={2} sx={{ overflow: 'hidden' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Группа</TableCell>
+                    <TableCell>Набор</TableCell>
+                    <TableCell>Статус</TableCell>
+                    <TableCell sx={{ width: 48 }} />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {groups.map(g => (
-                    <tr key={g.id} className="hover:bg-blue-50 transition-colors">
-                      <td className="px-6 py-3 cursor-pointer" onClick={() => navigate(`/groups/${g.id}`)}>
-                        <span className="font-medium text-slate-800 flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                            <span className="text-xs font-semibold text-emerald-600">{g.name[0]}</span>
-                          </div>
-                          {g.name}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 cursor-pointer" onClick={() => navigate(`/groups/${g.id}`)}>{g.year_start}</td>
-                      <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/groups/${g.id}`)}>
-                        <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          g.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
-                        }`}>{g.is_active ? 'Активна' : 'Неактивна'}</span>
-                      </td>
-                      <td className="px-6 py-3">
-                        <button
-                          onClick={() => removeGroup(g)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Убрать из кафедры"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </td>
-                    </tr>
+                    <TableRow key={g.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/groups/${g.id}`)}>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#D1FAE5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Typography variant="caption" fontWeight={700} sx={{ color: '#065F46' }}>{g.name[0]}</Typography>
+                          </Box>
+                          <Typography variant="body2" fontWeight={500}>{g.name}</Typography>
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>{g.year_start}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={g.is_active ? 'Активна' : 'Неактивна'}
+                          size="small"
+                          sx={g.is_active ? { bgcolor: '#D1FAE5', color: '#065F46' } : { bgcolor: '#F1F5F9', color: '#64748b' }}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton size="small" onClick={e => { e.stopPropagation(); removeGroup(g) }}
+                          sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: '#FEF2F2' } }}>
+                          <DeleteOutlineRounded sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Paper>
           )}
-        </Section>
+        </Box>
 
         {/* Дисциплины */}
-        <Section
-          title="Дисциплины"
-          subtitle={`${subjects.length}`}
-          onAdd={() => setAddSubjectsOpen(true)}
-          addLabel="Добавить дисциплину"
-        >
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+              <Typography variant="subtitle1" fontWeight={600}>Дисциплины</Typography>
+              <Typography variant="caption" color="text.disabled">{subjects.length}</Typography>
+            </Box>
+            <Button size="small" startIcon={<AddRounded />} onClick={() => setAddSubjectsOpen(true)}>Добавить дисциплину</Button>
+          </Box>
           {subjects.length === 0 ? (
-            <Empty text="Дисциплин нет" />
+            <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">Дисциплин нет</Typography></Paper>
           ) : (
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="text-left px-6 py-3 text-slate-500 font-medium">Название</th>
-                    <th className="text-left px-4 py-3 text-slate-500 font-medium">Код</th>
-                    <th className="text-right px-4 py-3 text-slate-500 font-medium">Часов</th>
-                    <th className="px-6 py-3" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
+            <Paper elevation={2} sx={{ overflow: 'hidden' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Название</TableCell>
+                    <TableCell>Код</TableCell>
+                    <TableCell align="right">Часов</TableCell>
+                    <TableCell sx={{ width: 48 }} />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {subjects.map(s => (
-                    <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-3 text-slate-800 font-medium">{s.name}</td>
-                      <td className="px-4 py-3 text-slate-400 font-mono text-xs">{s.code ?? '—'}</td>
-                      <td className="px-4 py-3 text-right text-slate-500">{s.hours_total ?? '—'}</td>
-                      <td className="px-6 py-3">
-                        <button
-                          onClick={() => removeSubject(s)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Убрать из кафедры"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </td>
-                    </tr>
+                    <TableRow key={s.id} hover>
+                      <TableCell sx={{ fontWeight: 500 }}>{s.name}</TableCell>
+                      <TableCell sx={{ color: 'text.disabled', fontFamily: 'monospace', fontSize: 12 }}>{s.code ?? '—'}</TableCell>
+                      <TableCell align="right" sx={{ color: 'text.secondary' }}>{s.hours_total ?? '—'}</TableCell>
+                      <TableCell align="right">
+                        <IconButton size="small" onClick={() => removeSubject(s)}
+                          sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: '#FEF2F2' } }}>
+                          <DeleteOutlineRounded sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Paper>
           )}
-        </Section>
+        </Box>
 
         {/* Преподаватели */}
-        <Section
-          title="Преподаватели"
-          subtitle={`${teachers.length}`}
-          onAdd={() => setAddTeachersOpen(true)}
-          addLabel="Добавить преподавателя"
-        >
+        <Box>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', mb: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+              <Typography variant="subtitle1" fontWeight={600}>Преподаватели</Typography>
+              <Typography variant="caption" color="text.disabled">{teachers.length}</Typography>
+            </Box>
+            <Button size="small" startIcon={<AddRounded />} onClick={() => setAddTeachersOpen(true)}>Добавить преподавателя</Button>
+          </Box>
           {teachers.length === 0 ? (
-            <Empty text="Преподавателей нет" />
+            <Paper sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">Преподавателей нет</Typography></Paper>
           ) : (
-            <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="text-left px-6 py-3 text-slate-500 font-medium">ФИО</th>
-                    <th className="text-left px-4 py-3 text-slate-500 font-medium">Должность</th>
-                    <th className="text-left px-4 py-3 text-slate-500 font-medium">Телефон</th>
-                    <th className="px-6 py-3" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
+            <Paper elevation={2} sx={{ overflow: 'hidden' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>ФИО</TableCell>
+                    <TableCell>Должность</TableCell>
+                    <TableCell>Телефон</TableCell>
+                    <TableCell sx={{ width: 48 }} />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {teachers.map(t => (
-                    <tr key={t.id} className="hover:bg-blue-50 transition-colors">
-                      <td className="px-6 py-3 cursor-pointer" onClick={() => navigate(`/teachers/${t.id}`)}>
-                        <span className="text-slate-800 font-medium flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
-                            <span className="text-xs font-semibold text-purple-600">{t.last_name[0]}</span>
-                          </div>
-                          {t.last_name} {t.first_name} {t.middle_name ?? ''}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 cursor-pointer" onClick={() => navigate(`/teachers/${t.id}`)}>{t.position ?? '—'}</td>
-                      <td className="px-4 py-3 text-slate-500 cursor-pointer" onClick={() => navigate(`/teachers/${t.id}`)}>{t.phone ?? '—'}</td>
-                      <td className="px-6 py-3">
-                        <button
-                          onClick={() => removeTeacher(t)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Убрать из кафедры"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </td>
-                    </tr>
+                    <TableRow key={t.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/teachers/${t.id}`)}>
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ width: 28, height: 28, borderRadius: '50%', bgcolor: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <Typography variant="caption" fontWeight={700} sx={{ color: '#6D28D9' }}>{t.last_name[0]}</Typography>
+                          </Box>
+                          <Typography variant="body2" fontWeight={500}>{t.last_name} {t.first_name} {t.middle_name ?? ''}</Typography>
+                        </Box>
+                      </TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>{t.position ?? '—'}</TableCell>
+                      <TableCell sx={{ color: 'text.secondary' }}>{t.phone ?? '—'}</TableCell>
+                      <TableCell align="right">
+                        <IconButton size="small" onClick={e => { e.stopPropagation(); removeTeacher(t) }}
+                          sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: '#FEF2F2' } }}>
+                          <DeleteOutlineRounded sx={{ fontSize: 18 }} />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TableBody>
+              </Table>
+            </Paper>
           )}
-        </Section>
-      </div>
+        </Box>
+      </Box>
 
       {addSubjectsOpen && (
         <AddItemsModal
@@ -243,9 +243,7 @@ export default function DepartmentDetailPage() {
             const all = await client.get<Subject[]>('/subjects').then(r => r.data)
             return all.filter(s => s.department_id !== dept.id).map(s => ({ id: s.id, label: s.name, sub: s.code ?? undefined }))
           }}
-          onAdd={async (ids) => {
-            await Promise.all(ids.map(id => updateSubject(id, { department_id: dept.id })))
-          }}
+          onAdd={async (ids) => { await Promise.all(ids.map(id => updateSubject(id, { department_id: dept.id }))) }}
           onClose={() => setAddSubjectsOpen(false)}
           onSave={() => { setAddSubjectsOpen(false); load() }}
         />
@@ -258,9 +256,7 @@ export default function DepartmentDetailPage() {
             const all = await client.get<Group[]>('/groups').then(r => r.data)
             return all.filter(g => g.department_id !== dept.id).map(g => ({ id: g.id, label: g.name, sub: String(g.year_start) }))
           }}
-          onAdd={async (ids) => {
-            await Promise.all(ids.map(id => updateGroup(id, { department_id: dept.id })))
-          }}
+          onAdd={async (ids) => { await Promise.all(ids.map(id => updateGroup(id, { department_id: dept.id }))) }}
           onClose={() => setAddGroupsOpen(false)}
           onSave={() => { setAddGroupsOpen(false); load() }}
         />
@@ -273,14 +269,12 @@ export default function DepartmentDetailPage() {
           onSave={() => { setAddTeachersOpen(false); load() }}
         />
       )}
-    </div>
+    </Box>
   )
 }
 
 function AddTeachersModal({ deptId, onClose, onSave }: {
-  deptId: number
-  onClose: () => void
-  onSave: () => void
+  deptId: number; onClose: () => void; onSave: () => void
 }) {
   const [items, setItems] = useState<(TeacherProfile & { currentDeptName?: string })[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
@@ -299,12 +293,10 @@ function AddTeachersModal({ deptId, onClose, onSave }: {
         )
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (id: number) => setSelected(prev => {
-    const next = new Set(prev)
-    next.has(id) ? next.delete(id) : next.add(id)
-    return next
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
   })
 
   const filtered = items.filter(t =>
@@ -314,76 +306,63 @@ function AddTeachersModal({ deptId, onClose, onSave }: {
   const submit = async () => {
     if (selected.size === 0) return
     setSaving(true)
-    try {
-      await Promise.all([...selected].map(id => setTeacherDepartment(id, deptId)))
-      onSave()
-    } catch {
-      setSaving(false)
-    }
+    try { await Promise.all([...selected].map(id => setTeacherDepartment(id, deptId))); onSave() }
+    catch { setSaving(false) }
   }
 
   const hasTransfers = [...selected].some(id => items.find(t => t.id === id)?.currentDeptName)
 
   return (
-    <Overlay onClose={onClose}>
-      <h2 className="text-lg font-semibold text-slate-800 mb-4">Добавить преподавателей в кафедру</h2>
-      <input
-        type="text"
-        placeholder="Поиск по ФИО или должности..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-      {loading ? (
-        <div className="flex items-center gap-2 text-slate-400 py-4 justify-center text-sm">
-          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          Загрузка...
-        </div>
-      ) : filtered.length === 0 ? (
-        <p className="text-sm text-slate-400 text-center py-4">Нет доступных преподавателей</p>
-      ) : (
-        <div className="max-h-64 overflow-y-auto divide-y divide-slate-50 border border-slate-100 rounded-lg mb-3">
-          {filtered.map(t => (
-            <label key={t.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={selected.has(t.id)}
-                onChange={() => toggle(t.id)}
-                className="rounded border-slate-300 text-blue-600 mt-0.5"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-800">{t.last_name} {t.first_name} {t.middle_name ?? ''}</p>
-                {t.position && <p className="text-xs text-slate-400">{t.position}</p>}
-              </div>
-              {t.currentDeptName
-                ? <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded shrink-0">← {t.currentDeptName}</span>
-                : <span className="text-xs text-slate-300 shrink-0">без кафедры</span>
-              }
-            </label>
-          ))}
-        </div>
-      )}
-      {hasTransfers && (
-        <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-3">
-          Отмеченные преподаватели с указанием кафедры будут переведены из неё в текущую.
-        </p>
-      )}
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-slate-400">Выбрано: {selected.size}</span>
-        <div className="flex gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">
-            Отмена
-          </button>
-          <button
-            onClick={submit}
-            disabled={saving || selected.size === 0}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Добавить преподавателей в кафедру</DialogTitle>
+      <DialogContent>
+        <TextField
+          fullWidth size="small" placeholder="Поиск по ФИО или должности..." value={search}
+          onChange={e => setSearch(e.target.value)}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+          sx={{ mt: 1, mb: 1.5 }}
+        />
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
+        ) : filtered.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>Нет доступных преподавателей</Typography>
+        ) : (
+          <Box sx={{ maxHeight: 280, overflowY: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
+            {filtered.map(t => (
+              <Box
+                key={t.id}
+                sx={{ display: 'flex', alignItems: 'center', px: 2, py: 1, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 }, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                onClick={() => toggle(t.id)}
+              >
+                <Checkbox checked={selected.has(t.id)} size="small" sx={{ mr: 1, p: 0.5 }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2">{t.last_name} {t.first_name} {t.middle_name ?? ''}</Typography>
+                  {t.position && <Typography variant="caption" color="text.disabled">{t.position}</Typography>}
+                </Box>
+                {t.currentDeptName
+                  ? <Chip label={`← ${t.currentDeptName}`} size="small" sx={{ bgcolor: '#FEF3C7', color: '#92400E', fontSize: 11, ml: 1, flexShrink: 0 }} />
+                  : <Typography variant="caption" color="text.disabled" sx={{ ml: 1, flexShrink: 0 }}>без кафедры</Typography>
+                }
+              </Box>
+            ))}
+          </Box>
+        )}
+        {hasTransfers && (
+          <Alert severity="warning" sx={{ mt: 1.5, fontSize: 12 }}>
+            Отмеченные преподаватели с указанием кафедры будут переведены из неё в текущую.
+          </Alert>
+        )}
+      </DialogContent>
+      <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
+        <Typography variant="caption" color="text.disabled">Выбрано: {selected.size}</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button color="inherit" onClick={onClose}>Отмена</Button>
+          <Button variant="contained" disabled={saving || selected.size === 0} onClick={submit}>
             {saving ? 'Добавление...' : `Добавить (${selected.size})`}
-          </button>
-        </div>
-      </div>
-    </Overlay>
+          </Button>
+        </Box>
+      </DialogActions>
+    </Dialog>
   )
 }
 
@@ -402,14 +381,10 @@ function AddItemsModal({ title, fetchItems, onAdd, onClose, onSave }: {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    fetchItems().then(setItems).finally(() => setLoading(false))
-  }, [])
+  useEffect(() => { fetchItems().then(setItems).finally(() => setLoading(false)) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggle = (id: number) => setSelected(prev => {
-    const next = new Set(prev)
-    next.has(id) ? next.delete(id) : next.add(id)
-    return next
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
   })
 
   const filtered = items.filter(i => i.label.toLowerCase().includes(search.toLowerCase()))
@@ -417,117 +392,49 @@ function AddItemsModal({ title, fetchItems, onAdd, onClose, onSave }: {
   const submit = async () => {
     if (selected.size === 0) return
     setSaving(true)
-    try {
-      await onAdd([...selected])
-      onSave()
-    } catch {
-      setSaving(false)
-    }
+    try { await onAdd([...selected]); onSave() }
+    catch { setSaving(false) }
   }
 
   return (
-    <Overlay onClose={onClose}>
-      <h2 className="text-lg font-semibold text-slate-800 mb-4">{title}</h2>
-      <input
-        type="text"
-        placeholder="Поиск..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-      {loading ? (
-        <div className="flex items-center gap-2 text-slate-400 py-4 justify-center text-sm">
-          <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          Загрузка...
-        </div>
-      ) : filtered.length === 0 ? (
-        <p className="text-sm text-slate-400 text-center py-4">Ничего не найдено</p>
-      ) : (
-        <div className="max-h-64 overflow-y-auto divide-y divide-slate-50 border border-slate-100 rounded-lg mb-4">
-          {filtered.map(item => (
-            <label key={item.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={selected.has(item.id)}
-                onChange={() => toggle(item.id)}
-                className="rounded border-slate-300 text-blue-600"
-              />
-              <span className="text-sm text-slate-800 flex-1">{item.label}</span>
-              {item.sub && <span className="text-xs text-slate-400 font-mono">{item.sub}</span>}
-            </label>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-slate-400">Выбрано: {selected.size}</span>
-        <div className="flex gap-3">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 transition-colors">
-            Отмена
-          </button>
-          <button
-            onClick={submit}
-            disabled={saving || selected.size === 0}
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {saving ? 'Добавление...' : `Добавить (${selected.size})`}
-          </button>
-        </div>
-      </div>
-    </Overlay>
-  )
-}
-
-function Section({ title, subtitle, children, onAdd, addLabel }: {
-  title: string
-  subtitle?: string
-  children: React.ReactNode
-  onAdd?: () => void
-  addLabel?: string
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-base font-semibold text-slate-700">{title}</h2>
-          {subtitle && <span className="text-xs text-slate-400">{subtitle}</span>}
-        </div>
-        {onAdd && (
-          <button
-            onClick={onAdd}
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
-          >
-            + {addLabel}
-          </button>
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <TextField
+          fullWidth size="small" placeholder="Поиск..." value={search}
+          onChange={e => setSearch(e.target.value)}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+          sx={{ mt: 1, mb: 1.5 }}
+        />
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={24} /></Box>
+        ) : filtered.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>Ничего не найдено</Typography>
+        ) : (
+          <Box sx={{ maxHeight: 280, overflowY: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
+            {filtered.map(item => (
+              <Box
+                key={item.id}
+                sx={{ display: 'flex', alignItems: 'center', px: 2, py: 1, borderBottom: 1, borderColor: 'divider', '&:last-child': { borderBottom: 0 }, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' } }}
+                onClick={() => toggle(item.id)}
+              >
+                <Checkbox checked={selected.has(item.id)} size="small" sx={{ mr: 1, p: 0.5 }} />
+                <Typography variant="body2" sx={{ flex: 1 }}>{item.label}</Typography>
+                {item.sub && <Typography variant="caption" color="text.disabled" sx={{ fontFamily: 'monospace', ml: 1 }}>{item.sub}</Typography>}
+              </Box>
+            ))}
+          </Box>
         )}
-      </div>
-      {children}
-    </div>
+      </DialogContent>
+      <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
+        <Typography variant="caption" color="text.disabled">Выбрано: {selected.size}</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button color="inherit" onClick={onClose}>Отмена</Button>
+          <Button variant="contained" disabled={saving || selected.size === 0} onClick={submit}>
+            {saving ? 'Добавление...' : `Добавить (${selected.size})`}
+          </Button>
+        </Box>
+      </DialogActions>
+    </Dialog>
   )
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className="text-xl font-bold text-slate-800 mt-0.5">{value}</p>
-    </div>
-  )
-}
-function Chevron() {
-  return (
-    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  )
-}
-function Spinner() {
-  return (
-    <div className="p-8 flex items-center gap-3 text-slate-400">
-      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      Загрузка...
-    </div>
-  )
-}
-function Empty({ text }: { text: string }) {
-  return <div className="bg-white rounded-xl border border-slate-100 p-8 text-center text-slate-400 shadow-sm text-sm">{text}</div>
 }
