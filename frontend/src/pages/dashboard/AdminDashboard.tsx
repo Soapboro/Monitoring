@@ -126,7 +126,7 @@ export default function AdminDashboard() {
                 size="small"
                 placeholder={mode === 'students' ? 'Поиск студента...' : mode === 'groups' ? 'Поиск группы...' : 'Поиск предмета...'}
                 value={search} onChange={e => setSearch(e.target.value)}
-                InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+                slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> } }}
                 sx={{ width: 200 }}
               />
               <Box

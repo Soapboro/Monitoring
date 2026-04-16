@@ -1,7 +1,7 @@
 from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case, and_, extract, cast, Float
+from sqlalchemy import select, func, case, and_, extract, cast, Float, Numeric
 
 from app.database import get_db
 from app.models.grade import Grade, GradeType
@@ -66,6 +66,7 @@ async def group_summary(
     # Предметы, по которым вообще есть выданные тесты для группы
     has_tests_q = (
         select(func.distinct(Test.subject_id))
+        .select_from(TestAssign)
         .join(Test, TestAssign.test_id == Test.id)
         .where(TestAssign.group_id == group_id)
     )
@@ -356,35 +357,38 @@ async def question_stats(
     query = (
         select(
             TestQuestion.id.label("test_question_id"),
-            TestQuestion.order_index,
+            TestQuestion.order_num.label("order_index"),
             Question.id.label("question_id"),
-            Question.text.label("question_text"),
+            Question.body.label("question_text"),
             Question.question_type,
-            Topic.name.label("topic"),
+            Topic.title.label("topic"),
             func.count(QuestionAnswer.id).label("attempts"),
             func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)).label("correct_count"),
             func.round(
                 cast(
-                    func.sum(case((QuestionAnswer.is_correct == False, 1), else_=0)), Float
+                    func.sum(case((QuestionAnswer.is_correct == False, 1), else_=0)), Numeric
                 ) / func.nullif(func.count(QuestionAnswer.id), 0) * 100,
                 1
             ).label("error_rate_pct"),
             func.round(func.avg(QuestionAnswer.time_spent_sec), 1).label("avg_time_sec"),
         )
-        .join(TestQuestion, QuestionAnswer.test_question_id == TestQuestion.id)
-        .join(Question, TestQuestion.question_id == Question.id)
-        .outerjoin(Topic, Question.topic_id == Topic.id)
         .join(TestSession, QuestionAnswer.session_id == TestSession.id)
+        .join(Question, QuestionAnswer.question_id == Question.id)
+        .join(TestQuestion, and_(
+            TestQuestion.question_id == Question.id,
+            TestQuestion.test_id == test_id,
+        ))
+        .outerjoin(Topic, Question.topic_id == Topic.id)
         .where(
             TestQuestion.test_id == test_id,
             TestSession.status == SessionStatus.completed,
         )
         .group_by(
-            TestQuestion.id, TestQuestion.order_index,
-            Question.id, Question.text, Question.question_type,
-            Topic.name,
+            TestQuestion.id, TestQuestion.order_num,
+            Question.id, Question.body, Question.question_type,
+            Topic.title,
         )
-        .order_by(TestQuestion.order_index)
+        .order_by(TestQuestion.order_num)
     )
     result = await db.execute(query)
     rows = result.mappings().all()
@@ -421,7 +425,7 @@ async def test_durations(
         .join(TestSession, TestSession.test_id == Test.id)
         .join(Subject, Test.subject_id == Subject.id)
         .where(
-            Test.teacher_id == teacher_id,
+            Test.author_id == teacher_id,
             TestSession.status == SessionStatus.completed,
             TestSession.finished_at.isnot(None),
             TestSession.started_at.isnot(None),
@@ -446,28 +450,27 @@ async def topic_mastery(
     query = (
         select(
             Topic.id.label("topic_id"),
-            Topic.name.label("topic"),
+            Topic.title.label("topic"),
             func.count(QuestionAnswer.id).label("attempts"),
             func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)).label("correct_count"),
             func.round(
                 cast(
-                    func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Float
+                    func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Numeric
                 ) / func.nullif(func.count(QuestionAnswer.id), 0) * 100,
                 1
             ).label("correct_pct"),
         )
-        .join(TestQuestion, QuestionAnswer.test_question_id == TestQuestion.id)
-        .join(Question, TestQuestion.question_id == Question.id)
-        .join(Topic, Question.topic_id == Topic.id)
         .join(TestSession, QuestionAnswer.session_id == TestSession.id)
         .join(Student, TestSession.student_id == Student.id)
+        .join(Question, QuestionAnswer.question_id == Question.id)
+        .join(Topic, Question.topic_id == Topic.id)
         .where(
             Student.group_id == group_id,
             TestSession.status == SessionStatus.completed,
         )
-        .group_by(Topic.id, Topic.name)
+        .group_by(Topic.id, Topic.title)
         .order_by(func.round(
-            cast(func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Float)
+            cast(func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Numeric)
             / func.nullif(func.count(QuestionAnswer.id), 0) * 100, 1
         ))
     )
@@ -489,31 +492,27 @@ async def student_weaknesses(
             Student.id.label("student_id"),
             (Student.last_name + " " + Student.first_name).label("student_name"),
             Topic.id.label("topic_id"),
-            Topic.name.label("topic"),
+            Topic.title.label("topic"),
             func.count(QuestionAnswer.id).label("attempts"),
             func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)).label("correct_count"),
             func.round(
                 cast(
-                    func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Float
+                    func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Numeric
                 ) / func.nullif(func.count(QuestionAnswer.id), 0) * 100,
                 1
             ).label("correct_pct"),
         )
         .join(TestSession, QuestionAnswer.session_id == TestSession.id)
         .join(Student, TestSession.student_id == Student.id)
-        .join(TestQuestion, QuestionAnswer.test_question_id == TestQuestion.id)
-        .join(Question, TestQuestion.question_id == Question.id)
+        .join(Question, QuestionAnswer.question_id == Question.id)
         .join(Topic, Question.topic_id == Topic.id)
         .where(
             Student.group_id == group_id,
             TestSession.status == SessionStatus.completed,
         )
-        .group_by(Student.id, Student.last_name, Student.first_name, Topic.id, Topic.name)
+        .group_by(Student.id, Student.last_name, Student.first_name, Topic.id, Topic.title)
         .having(func.count(QuestionAnswer.id) >= min_attempts)
-        .order_by(Student.last_name, Student.first_name, func.round(
-            cast(func.sum(case((QuestionAnswer.is_correct == True, 1), else_=0)), Float)
-            / func.nullif(func.count(QuestionAnswer.id), 0) * 100, 1
-        ))
+        .order_by(Student.last_name, Student.first_name)
     )
     result = await db.execute(query)
     rows = result.mappings().all()

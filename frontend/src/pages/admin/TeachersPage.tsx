@@ -45,7 +45,7 @@ export default function TeachersPage() {
         <TextField
           size="small" placeholder="Поиск по ФИО или должности..."
           value={search} onChange={e => setSearch(e.target.value)}
-          InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> } }}
           sx={{ width: 280 }}
         />
       </Box>

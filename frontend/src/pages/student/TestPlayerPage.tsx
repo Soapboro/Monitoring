@@ -82,9 +82,9 @@ function SingleChoice({ question, answer, onChange }: {
   const selected = answer?.selected ?? null
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      {choices.map(ch => (
+      {choices.map((ch, idx) => (
         <Paper
-          key={ch.id}
+          key={`${ch.id}_${idx}`}
           variant="outlined"
           sx={{
             p: 2, cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 1.5,
@@ -125,9 +125,9 @@ function MultipleChoice({ question, answer, onChange }: {
   }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      {choices.map(ch => (
+      {choices.map((ch, idx) => (
         <Paper
-          key={ch.id}
+          key={`${ch.id}_${idx}`}
           variant="outlined"
           sx={{
             p: 2, cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 1.5,

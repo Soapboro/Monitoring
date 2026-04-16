@@ -126,10 +126,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </ListItemIcon>
                 <ListItemText
                   primary={item.label}
-                  primaryTypographyProps={{
-                    fontSize: 13.5,
-                    fontWeight: isActive ? 600 : 400,
-                    color: isActive ? PEACH[700] : WARM[700],
+                  slotProps={{
+                    primary: {
+                      fontSize: 13.5,
+                      fontWeight: isActive ? 600 : 400,
+                      color: isActive ? PEACH[700] : WARM[700],
+                    },
                   }}
                 />
                 {isActive && (
@@ -185,7 +187,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </ListItemIcon>
             <ListItemText
               primary="Выйти"
-              primaryTypographyProps={{ fontSize: 13.5, fontWeight: 400 }}
+              slotProps={{ primary: { fontSize: 13.5, fontWeight: 400 } }}
             />
           </ListItemButton>
         </Tooltip>

@@ -23,7 +23,11 @@
       "Bash(cmd /c \"cd /d c:\\\\Users\\\\1\\\\Desktop\\\\Monitoring\\\\frontend && npm install 2>&1\")",
       "Bash(node node_modules/vite/dist/node/cli.js --version)",
       "Bash(node node_modules/vite/dist/node/index.js --version)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(python seed_full.py)",
+      "Bash(xargs grep *)",
+      "Bash(xargs sed *)",
+      "Bash(findstr \"InputProps slotProps\")"
     ]
   }
 }

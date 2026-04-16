@@ -57,7 +57,7 @@ export default function GroupsPage() {
           <TextField
             size="small" placeholder="Поиск по названию..."
             value={search} onChange={e => setSearch(e.target.value)}
-            InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+            slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> } }}
             sx={{ width: 220 }}
           />
           <Button variant="contained" startIcon={<AddRounded />} onClick={() => setModal({ mode: 'create' })}>

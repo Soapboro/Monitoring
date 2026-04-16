@@ -89,17 +89,19 @@ export default function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               size="small"
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setShowPwd(v => !v)} edge="end" tabIndex={-1}>
-                      {showPwd
-                        ? <VisibilityOff fontSize="small" sx={{ color: WARM[400] }} />
-                        : <Visibility fontSize="small" sx={{ color: WARM[400] }} />
-                      }
-                    </IconButton>
-                  </InputAdornment>
-                ),
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setShowPwd(v => !v)} edge="end" tabIndex={-1}>
+                        {showPwd
+                          ? <VisibilityOff fontSize="small" sx={{ color: WARM[400] }} />
+                          : <Visibility fontSize="small" sx={{ color: WARM[400] }} />
+                        }
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
               }}
             />
 
@@ -135,7 +137,7 @@ export default function LoginPage() {
         </Paper>
 
         <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', mt: 3, color: WARM[400] }}>
-          ОмГУ им. Ф.М. Достоевского · СПО и ДП
+          Отслеживайте свои успехи или контролируйте процесс обучения!
         </Typography>
       </Box>
     </Box>

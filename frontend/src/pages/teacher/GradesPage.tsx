@@ -180,7 +180,7 @@ export default function GradesPage() {
           placeholder="Поиск по студенту или предмету..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          InputProps={{ startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> } }}
           sx={{ minWidth: 260, flex: 1 }}
         />
         {subjects.length > 1 && (

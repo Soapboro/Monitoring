@@ -1,5 +1,12 @@
-Администратор:  admin@test.ru     / admin1234  
-Преподаватель:  teacher@test.ru   / teacher1234
-Студент:        student@test.ru   / student1234
+Email	Пароль	Ведёт
+ivanov@demo.ru	teacher1234	Python (ИВТ-21, ИВТ-22), БД (ИВТ-22)
+smirnova@demo.ru	teacher1234	Высшая математика (МАТ-21)
+petrov@demo.ru	teacher1234	Веб-разработка, БД (ИВТ-23)
+Студенты
 
-uvicorn app.main:app --reload
+Email	Пароль	Группа
+s1_ivt21@demo.ru	student1234	ИВТ-21 — Александров (отличник)
+s5_ivt21@demo.ru	student1234	ИВТ-21 — Ефимов (слабый)
+s1_ivt22@demo.ru	student1234	ИВТ-22 — Зайцев
+s1_ivt23@demo.ru	student1234	ИВТ-23 — Никитин
+s1_mat21@demo.ru	student1234	МАТ-21 — Сорокин
