@@ -52,16 +52,20 @@ rectangle "Данные об успеваемости\n────────�
 
 rectangle "Данные о посещаемости\n──────────────────\n• Студент\n• Дата занятия\n• Присутствие (да/нет)\n• Комментарий\n• Массовая запись" as InAttendance
 
-rectangle "Тесты и вопросы\n──────────────────\n• Тип вопроса:\n  single/multiple choice,\n  text input, matching,\n  ordering\n• Сложность (easy/medium/hard)\n• Макс. балл\n• Тест: лимит времени,\n  попытки, проходной %\n• Назначение группе" as InTests
+rectangle "Темы дисциплин\n──────────────────\n• Название темы\n• Дисциплина\n• Родительская тема\n  (иерархия)" as InTopics
 
-rectangle "Расписание занятий\n──────────────────\n• Тип (лекция/практика/\n  лабораторная/семинар)\n• Дата и время\n• Кабинет\n• Тема" as InLessons
+rectangle "Банк вопросов\n──────────────────\n• Тип вопроса:\n  single/multiple choice,\n  text input, matching,\n  ordering\n• Сложность (easy/medium/hard)\n• Варианты ответов (JSONB)\n• Макс. балл\n• Изображение\n• Пояснение к ответу\n• Тема" as InQuestions
+
+rectangle "Тесты\n──────────────────\n• Название / Статус:\n  draft/published/archived\n• Лимит времени\n• Кол-во попыток\n• Проходной %\n• Перемешивание вопросов\n• Окно доступности\n• Назначение группе / студенту" as InTests
+
+rectangle "Расписание занятий\n──────────────────\n• Тип (лекция/практика/\n  лабораторная/семинар/другое)\n• Дата и время\n• Кабинет\n• Тема" as InLessons
 
 ' ─────────────── ВХОДНЫЕ БЛОКИ СТУДЕНТА ───────────────
 rectangle "Ответы на тесты\n──────────────────\n• Выбор варианта(ов)\n• Ввод текста\n• Сопоставление\n• Упорядочивание\n• Время на вопрос" as InAnswers
 
 ' ─────────────── ЯДРО СИСТЕМЫ ───────────────
 rectangle "Система мониторинга успеваемости" as System #E8F5E9 {
-    database "База данных\nобразовательной организации\n──────────────────────\nusers · students · teachers\ngroups · departments · subjects\nteaching_assignments · lessons\ngrades · attendance · topics\ntests · test_sessions\nquestion_answers\nadaptive_recommendations\nnotifications · audit_log" as DB
+    database "База данных\nобразовательной организации\n──────────────────────\nusers · students · teachers\ngroups · departments · subjects\nteaching_assignments · lessons\ngrades · attendance · topics\nquestions · test_questions\ntests · test_sessions\nquestion_answers\nadaptive_recommendations\nnotifications · audit_log" as DB
 }
 
 ' ─────────────── ВЫХОДНЫЕ БЛОКИ ───────────────
@@ -81,7 +85,7 @@ rectangle "Аналитика по группам\n─────────�
 
 rectangle "Прогресс студента\n(для преподавателя)\n──────────────────\n• Оценки по дисциплинам\n• Посещаемость\n• Результаты тестов" as OutStudentProgress
 
-rectangle "Электронные ведомости\n(Экспорт)\n──────────────────\n• Оценки: группа, дисциплина,\n  год, семестр, тип оценки\n• Посещаемость: группа,\n  дисциплина, период\n• Форматы: Excel / PDF" as OutExport
+rectangle "Электронные ведомости\n(Экспорт)\n──────────────────\n• Оценки: группа, дисциплина,\n  год, семестр, тип оценки\n• Посещаемость: группа,\n  дисциплина, период\n• Результаты тестов:\n  группа, дисциплина\n• Форматы: Excel / PDF" as OutExport
 
 rectangle "Дашборд администратора\n──────────────────\n• Кол-во: студентов, преподавателей,\n  групп, дисциплин\n• Рейтинг студентов\n• Рейтинг групп\n• Рейтинг дисциплин" as OutAdminDash
 
@@ -109,11 +113,15 @@ InUsers       --> DB
 ' ─────────────── СВЯЗИ: ВХОД ПРЕПОДАВАТЕЛЯ ───────────────
 Teacher --> InGrades     : вводит
 Teacher --> InAttendance : вводит
+Teacher --> InTopics     : создаёт
+Teacher --> InQuestions  : создаёт
 Teacher --> InTests      : создаёт
 Teacher --> InLessons    : планирует
 
 InGrades     --> DB
 InAttendance --> DB
+InTopics     --> DB
+InQuestions  --> DB
 InTests      --> DB
 InLessons    --> DB
 
