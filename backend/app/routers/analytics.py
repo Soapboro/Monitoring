@@ -479,6 +479,104 @@ async def topic_mastery(
     return [dict(r) for r in rows]
 
 
+@router.get("/student-dynamics/{student_id}")
+async def student_dynamics(
+    student_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Динамика успеваемости студента по семестрам с трендом."""
+    if current_user.role.value == "student":
+        res = await db.execute(select(Student).where(Student.user_id == current_user.id))
+        st = res.scalar_one_or_none()
+        if not st or st.id != student_id:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Доступ запрещён")
+
+    period_q = (
+        select(
+            TeachingAssignment.acad_year,
+            TeachingAssignment.semester,
+            func.round(func.avg(Grade.value), 2).label("avg_grade"),
+            func.min(Grade.value).label("min_grade"),
+            func.max(Grade.value).label("max_grade"),
+            func.count(Grade.id).label("grades_count"),
+        )
+        .join(TeachingAssignment, Grade.assignment_id == TeachingAssignment.id)
+        .where(Grade.student_id == student_id, Grade.value.isnot(None))
+        .group_by(TeachingAssignment.acad_year, TeachingAssignment.semester)
+        .order_by(TeachingAssignment.acad_year, TeachingAssignment.semester)
+    )
+    periods = [dict(r) for r in (await db.execute(period_q)).mappings().all()]
+    for i, p in enumerate(periods):
+        p["trend"] = None if i == 0 else round(
+            float(p["avg_grade"] or 0) - float(periods[i - 1]["avg_grade"] or 0), 2
+        )
+
+    subject_q = (
+        select(
+            TeachingAssignment.acad_year,
+            TeachingAssignment.semester,
+            Subject.name.label("subject"),
+            func.round(func.avg(Grade.value), 2).label("avg_grade"),
+            func.count(Grade.id).label("grades_count"),
+        )
+        .join(TeachingAssignment, Grade.assignment_id == TeachingAssignment.id)
+        .join(Subject, TeachingAssignment.subject_id == Subject.id)
+        .where(Grade.student_id == student_id, Grade.value.isnot(None))
+        .group_by(TeachingAssignment.acad_year, TeachingAssignment.semester, Subject.name)
+        .order_by(TeachingAssignment.acad_year, TeachingAssignment.semester, Subject.name)
+    )
+    by_subject = [dict(r) for r in (await db.execute(subject_q)).mappings().all()]
+    return {"periods": periods, "by_subject": by_subject}
+
+
+@router.get("/group-dynamics")
+async def group_dynamics(
+    group_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_teacher),
+):
+    """Динамика успеваемости группы по семестрам (все типы оценок) с трендом."""
+    period_q = (
+        select(
+            TeachingAssignment.acad_year,
+            TeachingAssignment.semester,
+            func.round(func.avg(Grade.value), 2).label("avg_grade"),
+            func.min(Grade.value).label("min_grade"),
+            func.max(Grade.value).label("max_grade"),
+            func.count(func.distinct(Grade.student_id)).label("students_count"),
+            func.count(Grade.id).label("grades_count"),
+        )
+        .join(TeachingAssignment, Grade.assignment_id == TeachingAssignment.id)
+        .where(TeachingAssignment.group_id == group_id, Grade.value.isnot(None))
+        .group_by(TeachingAssignment.acad_year, TeachingAssignment.semester)
+        .order_by(TeachingAssignment.acad_year, TeachingAssignment.semester)
+    )
+    periods = [dict(r) for r in (await db.execute(period_q)).mappings().all()]
+    for i, p in enumerate(periods):
+        p["trend"] = None if i == 0 else round(
+            float(p["avg_grade"] or 0) - float(periods[i - 1]["avg_grade"] or 0), 2
+        )
+
+    subject_q = (
+        select(
+            TeachingAssignment.acad_year,
+            TeachingAssignment.semester,
+            Subject.name.label("subject"),
+            func.round(func.avg(Grade.value), 2).label("avg_grade"),
+            func.count(func.distinct(Grade.student_id)).label("students_count"),
+        )
+        .join(TeachingAssignment, Grade.assignment_id == TeachingAssignment.id)
+        .join(Subject, TeachingAssignment.subject_id == Subject.id)
+        .where(TeachingAssignment.group_id == group_id, Grade.value.isnot(None))
+        .group_by(TeachingAssignment.acad_year, TeachingAssignment.semester, Subject.name)
+        .order_by(TeachingAssignment.acad_year, TeachingAssignment.semester, Subject.name)
+    )
+    by_subject = [dict(r) for r in (await db.execute(subject_q)).mappings().all()]
+    return {"periods": periods, "by_subject": by_subject}
+
+
 @router.get("/student-weaknesses")
 async def student_weaknesses(
     group_id: int,

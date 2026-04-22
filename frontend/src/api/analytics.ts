@@ -176,3 +176,45 @@ export async function getStudentWeaknesses(groupId: number, minAttempts = 2): Pr
   const { data } = await client.get('/analytics/student-weaknesses', { params: { group_id: groupId, min_attempts: minAttempts } })
   return data
 }
+
+export interface DynamicsPeriod {
+  acad_year: string
+  semester: number
+  avg_grade: number
+  min_grade: number
+  max_grade: number
+  grades_count: number
+  trend: number | null
+}
+
+export interface DynamicsBySubject {
+  acad_year: string
+  semester: number
+  subject: string
+  avg_grade: number
+  grades_count: number
+}
+
+export interface GroupDynamicsBySubject extends DynamicsBySubject {
+  students_count: number
+}
+
+export interface StudentDynamics {
+  periods: DynamicsPeriod[]
+  by_subject: DynamicsBySubject[]
+}
+
+export interface GroupDynamics {
+  periods: (DynamicsPeriod & { students_count: number })[]
+  by_subject: GroupDynamicsBySubject[]
+}
+
+export async function getStudentDynamics(studentId: number): Promise<StudentDynamics> {
+  const { data } = await client.get(`/analytics/student-dynamics/${studentId}`)
+  return data
+}
+
+export async function getGroupDynamics(groupId: number): Promise<GroupDynamics> {
+  const { data } = await client.get('/analytics/group-dynamics', { params: { group_id: groupId } })
+  return data
+}

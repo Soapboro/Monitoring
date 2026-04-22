@@ -2,12 +2,19 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Box, Paper, Typography, Chip, CircularProgress, Breadcrumbs, Link,
-  Table, TableHead, TableBody, TableRow, TableCell, Button,
+  Table, TableHead, TableBody, TableRow, TableCell, Button, Stack,
 } from '@mui/material'
-import { ChevronRightRounded } from '@mui/icons-material'
+import { ChevronRightRounded, TableChartRounded, PictureAsPdfRounded } from '@mui/icons-material'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine, Legend,
+} from 'recharts'
 import client from '../../api/client'
 import { getMyTeacherProfile, getAssignments } from '../../api/resources'
 import type { StudentProfile, TeachingAssignment, Subject, GradeRecord, AttendanceRecord } from '../../api/resources'
+import { getStudentDynamics } from '../../api/analytics'
+import type { StudentDynamics } from '../../api/analytics'
+import { downloadStudentExcel, downloadStudentPdf } from '../../api/reports'
 import { WARM } from '../../theme'
 
 interface TestSession {
@@ -43,9 +50,11 @@ export default function TeacherStudentPage() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
   const [sessions, setSessions] = useState<TestSession[]>([])
   const [tests, setTests] = useState<Record<number, TestInfo>>({})
+  const [dynamics, setDynamics] = useState<StudentDynamics | null>(null)
   const [loading, setLoading] = useState(true)
   const [resetting, setResetting] = useState<number | null>(null)
   const [resetMsg, setResetMsg] = useState<Record<number, string>>({})
+  const [exportBusy, setExportBusy] = useState<'excel' | 'pdf' | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -73,11 +82,13 @@ export default function TeacherStudentPage() {
       const enriched: AssignmentWithSubject[] = myAssignments.map(a => ({ ...a, subjectName: subjectMap[a.subject_id] ?? '—' }))
       setAssignments(enriched)
 
-      const [allGrades, allAtt, rawSessions] = await Promise.all([
+      const [allGrades, allAtt, rawSessions, dyn] = await Promise.all([
         Promise.all(myAssignments.map(a => client.get<GradeRecord[]>('/grades', { params: { assignment_id: a.id, student_id: studentId } }).then(r => r.data))).then(arrays => arrays.flat()),
         Promise.all(myAssignments.map(a => client.get<AttendanceRecord[]>('/attendance', { params: { assignment_id: a.id, student_id: studentId } }).then(r => r.data))).then(arrays => arrays.flat()),
         client.get<TestSession[]>(`/sessions/student/${studentId}`).then(r => r.data),
+        getStudentDynamics(studentId).catch(() => null),
       ])
+      setDynamics(dyn)
 
       setGrades(allGrades.sort((a, b) => b.date_recorded.localeCompare(a.date_recorded)))
       setAttendance(allAtt.sort((a, b) => b.lesson_date.localeCompare(a.lesson_date)))
@@ -134,12 +145,36 @@ export default function TeacherStudentPage() {
           <Box sx={{ width: 56, height: 56, borderRadius: '50%', bgcolor: '#DBEAFE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Typography variant="h5" fontWeight={700} sx={{ color: '#1D4ED8' }}>{student.last_name[0]}</Typography>
           </Box>
-          <Box>
+          <Box sx={{ flex: 1 }}>
             <Typography variant="h6" fontWeight={600}>{fullName}</Typography>
             <Typography variant="body2" color="text.secondary">
               {groupName}{student.student_num ? ` · № ${student.student_num}` : ''}
             </Typography>
           </Box>
+          <Stack direction="row" spacing={1} flexShrink={0}>
+            <Button
+              size="small" variant="outlined"
+              startIcon={exportBusy === 'excel' ? <CircularProgress size={12} /> : <TableChartRounded fontSize="small" />}
+              disabled={exportBusy !== null}
+              onClick={async () => {
+                setExportBusy('excel')
+                try { await downloadStudentExcel(studentId) } catch { /* silent */ } finally { setExportBusy(null) }
+              }}
+            >
+              {exportBusy === 'excel' ? '...' : 'Excel'}
+            </Button>
+            <Button
+              size="small" variant="outlined" color="error"
+              startIcon={exportBusy === 'pdf' ? <CircularProgress size={12} /> : <PictureAsPdfRounded fontSize="small" />}
+              disabled={exportBusy !== null}
+              onClick={async () => {
+                setExportBusy('pdf')
+                try { await downloadStudentPdf(studentId) } catch { /* silent */ } finally { setExportBusy(null) }
+              }}
+            >
+              {exportBusy === 'pdf' ? '...' : 'PDF'}
+            </Button>
+          </Stack>
         </Box>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, mt: 2.5, pt: 2.5, borderTop: 1, borderColor: 'divider' }}>
@@ -165,6 +200,44 @@ export default function TeacherStudentPage() {
           </Box>
         </Box>
       </Paper>
+
+      {/* Dynamics chart */}
+      {dynamics && dynamics.periods.length > 1 && (() => {
+        const allSubjects = [...new Set(dynamics.by_subject.map(r => r.subject))]
+        const byPeriod = new Map<string, Record<string, number>>()
+        dynamics.periods.forEach(p => {
+          byPeriod.set(`${p.acad_year} · сем.${p.semester}`, { avg: Number(p.avg_grade) })
+        })
+        dynamics.by_subject.forEach(r => {
+          const key = `${r.acad_year} · сем.${r.semester}`
+          const entry = byPeriod.get(key)
+          if (entry) entry[r.subject] = Number(r.avg_grade)
+        })
+        const chartData = Array.from(byPeriod.entries()).map(([period, vals]) => ({ period, ...vals }))
+        const COLORS = ['#C9874A', '#347856', '#1D4ED8', '#9333ea', '#0891b2', '#dc2626']
+        return (
+          <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>Динамика успеваемости по семестрам</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+              Средний балл — общий и по дисциплинам
+            </Typography>
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={chartData} margin={{ top: 4, right: 16, left: -10, bottom: 48 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#64748b' }} angle={-30} textAnchor="end" interval={0} />
+                <YAxis domain={[1, 5]} tick={{ fontSize: 11, fill: '#64748b' }} />
+                <ReferenceLine y={3} stroke="#e2e8f0" strokeDasharray="4 2" />
+                <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [v.toFixed(2), '']} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                <Line type="monotone" dataKey="avg" name="Средний" stroke="#1D4ED8" strokeWidth={2.5} dot={{ r: 5 }} activeDot={{ r: 7 }} connectNulls />
+                {allSubjects.slice(0, 5).map((s, i) => (
+                  <Line key={s} type="monotone" dataKey={s} stroke={COLORS[i]} strokeWidth={1.5} dot={{ r: 3 }} strokeDasharray="5 3" connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </Paper>
+        )
+      })()}
 
       {/* Subjects */}
       {assignments.length > 0 && (

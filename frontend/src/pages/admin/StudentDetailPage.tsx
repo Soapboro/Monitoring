@@ -2,13 +2,18 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Box, Paper, Typography, Chip, CircularProgress, Breadcrumbs, Link,
-  Collapse, Button, LinearProgress,
+  Collapse, Button, LinearProgress, Stack,
 } from '@mui/material'
-import { ChevronRightRounded, VerifiedRounded } from '@mui/icons-material'
+import { ChevronRightRounded, VerifiedRounded, TableChartRounded, PictureAsPdfRounded } from '@mui/icons-material'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine, Legend,
+} from 'recharts'
 import client from '../../api/client'
 import type { StudentProfile, GradeOut, AttendanceRecord, TestSession, TeachingAssignment, Subject } from '../../api/resources'
 import { useAuthStore } from '../../store/authStore'
 import { getMyTeacherProfile, getAssignments } from '../../api/resources'
+import { downloadStudentExcel, downloadStudentPdf } from '../../api/reports'
 import { WARM } from '../../theme'
 
 interface SubjectData {
@@ -43,6 +48,7 @@ export default function StudentDetailPage() {
   const [expandedSubject, setExpandedSubject] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [teacherBlocks, setTeacherBlocks] = useState<TeacherSubjectBlock[]>([])
+  const [exportBusy, setExportBusy] = useState<'excel' | 'pdf' | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -52,7 +58,7 @@ export default function StudentDetailPage() {
           client.get<StudentProfile>(`/students/${id}`).then(r => r.data),
           client.get<GradeOut[]>('/grades', { params: { student_id: id } }).then(r => r.data),
           client.get<AttendanceRecord[]>('/attendance', { params: { student_id: id } }).then(r => r.data),
-          client.get<TestSession[]>('/test-sessions', { params: { student_id: id } }).then(r => r.data).catch(() => []),
+          client.get<TestSession[]>(`/sessions/student/${id}`).then(r => r.data).catch(() => []),
         ])
         setStudent(s); setSessions(sess)
 
@@ -143,11 +149,31 @@ export default function StudentDetailPage() {
               {student.student_num && <Typography variant="caption" color="text.secondary">· №{student.student_num}</Typography>}
             </Box>
           </Box>
-          <Chip
-            label={student.is_active ? 'Активен' : 'Неактивен'}
-            size="small"
-            sx={student.is_active ? { bgcolor: '#D4EDDF', color: '#347856' } : { bgcolor: '#F1F5F9', color: '#64748b' }}
-          />
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Button
+              variant="outlined" size="small" color="success"
+              startIcon={exportBusy === 'excel' ? <CircularProgress size={13} color="inherit" /> : <TableChartRounded fontSize="small" />}
+              disabled={exportBusy !== null}
+              onClick={async () => {
+                setExportBusy('excel')
+                try { await downloadStudentExcel(Number(id)) } finally { setExportBusy(null) }
+              }}
+            >{exportBusy === 'excel' ? 'Формирую...' : 'Excel'}</Button>
+            <Button
+              variant="outlined" size="small" color="error"
+              startIcon={exportBusy === 'pdf' ? <CircularProgress size={13} color="inherit" /> : <PictureAsPdfRounded fontSize="small" />}
+              disabled={exportBusy !== null}
+              onClick={async () => {
+                setExportBusy('pdf')
+                try { await downloadStudentPdf(Number(id)) } finally { setExportBusy(null) }
+              }}
+            >{exportBusy === 'pdf' ? 'Формирую...' : 'PDF'}</Button>
+            <Chip
+              label={student.is_active ? 'Активен' : 'Неактивен'}
+              size="small"
+              sx={student.is_active ? { bgcolor: '#D4EDDF', color: '#347856' } : { bgcolor: '#F1F5F9', color: '#64748b' }}
+            />
+          </Stack>
         </Box>
 
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, mt: 2.5, pt: 2.5, borderTop: 1, borderColor: 'divider' }}>
@@ -164,6 +190,48 @@ export default function StudentDetailPage() {
           ))}
         </Box>
       </Paper>
+
+      {/* Grades chart — X: date, Y: grade value, one line per subject */}
+      {(() => {
+        const LINE_COLORS = ['#F97316', '#3B82F6', '#10B981', '#8B5CF6', '#EC4899', '#14B8A6']
+        const subjsWithGrades = subjects
+          .map(s => ({ name: s.name, grades: s.grades.filter(g => g.value !== null) }))
+          .filter(s => s.grades.length > 0)
+        if (subjsWithGrades.length === 0) return null
+
+        const allDates = [...new Set(
+          subjsWithGrades.flatMap(s => s.grades.map(g => String(g.date_recorded).slice(0, 10)))
+        )].sort()
+        if (allDates.length < 2) return null
+
+        const chartData = allDates.map(date => {
+          const point: Record<string, unknown> = { date }
+          subjsWithGrades.forEach(s => {
+            const onDate = s.grades.filter(g => String(g.date_recorded).slice(0, 10) === date)
+            if (onDate.length > 0) point[s.name] = onDate[onDate.length - 1].value
+          })
+          return point
+        })
+
+        return (
+          <Paper elevation={1} sx={{ p: 3, mb: 3 }}>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 2 }}>Оценки по датам</Typography>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={chartData} margin={{ top: 4, right: 16, left: -10, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Legend iconSize={10} wrapperStyle={{ fontSize: 11 }} />
+                <ReferenceLine y={3} stroke="#CBD5E1" strokeDasharray="4 4" />
+                {subjsWithGrades.map((s, i) => (
+                  <Line key={s.name} type="monotone" dataKey={s.name} stroke={LINE_COLORS[i % LINE_COLORS.length]} strokeWidth={1.5} dot={{ r: 3 }} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </Paper>
+        )
+      })()}
 
       {/* Teacher block */}
       {isTeacher && teacherBlocks.length > 0 && (

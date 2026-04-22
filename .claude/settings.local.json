@@ -27,7 +27,8 @@
       "Bash(python seed_full.py)",
       "Bash(xargs grep *)",
       "Bash(xargs sed *)",
-      "Bash(findstr \"InputProps slotProps\")"
+      "Bash(findstr \"InputProps slotProps\")",
+      "Bash(grep \"\\\\.tsx$\")"
     ]
   }
 }

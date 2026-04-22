@@ -1,0 +1,162 @@
+@startuml Структура входной и выходной информации
+
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam backgroundColor #FFFFFF
+
+skinparam actor {
+    BackgroundColor #DDEEFF
+    BorderColor #336699
+    FontStyle bold
+}
+
+skinparam rectangle {
+    BackgroundColor #FFF3CD
+    BorderColor #CC8800
+    FontSize 11
+}
+
+skinparam database {
+    BackgroundColor #E8F5E9
+    BorderColor #2E7D32
+}
+
+skinparam card {
+    BackgroundColor #E3F2FD
+    BorderColor #1565C0
+    FontStyle bold
+}
+
+title Структура входной и выходной информации\nСистема мониторинга успеваемости
+
+' ─────────────── АКТОРЫ ───────────────
+card Администратор as Admin
+card Преподаватель as Teacher
+card Обучающийся  as Student
+
+' ─────────────── ВХОДНЫЕ БЛОКИ АДМИНИСТРАТОРА ───────────────
+rectangle "Данные об обучающихся\n──────────────────\n• ФИО\n• Дата рождения\n• Группа\n• Номер студента\n• Телефон\n• is_active" as InStudents
+
+rectangle "Данные о преподавателях\n──────────────────\n• ФИО\n• Должность\n• Телефон\n• Кафедра" as InTeachers
+
+rectangle "Учебные дисциплины\n──────────────────\n• Название / Код\n• Кол-во часов\n• Форма контроля\n• Кафедра" as InSubjects
+
+rectangle "Группы и кафедры\n──────────────────\n• Название группы\n• Год начала\n• Кафедра" as InGroups
+
+rectangle "Учебные нагрузки\n──────────────────\n• Преподаватель\n• Дисциплина\n• Группа\n• Семестр / Год\n• Форма контроля" as InAssignments
+
+rectangle "Пользователи системы\n──────────────────\n• Email / Пароль\n• Роль (admin/teacher/student)\n• is_active" as InUsers
+
+' ─────────────── ВХОДНЫЕ БЛОКИ ПРЕПОДАВАТЕЛЯ ───────────────
+rectangle "Данные об успеваемости\n──────────────────\n• Оценка (1–5)\n• Тип оценки:\n  current / thematic /\n  midterm / final /\n  test / attendance\n• Комментарий\n• Дата" as InGrades
+
+rectangle "Данные о посещаемости\n──────────────────\n• Студент\n• Дата занятия\n• Присутствие (да/нет)\n• Комментарий\n• Массовая запись" as InAttendance
+
+rectangle "Тесты и вопросы\n──────────────────\n• Тип вопроса:\n  single/multiple choice,\n  text input, matching,\n  ordering\n• Сложность (easy/medium/hard)\n• Макс. балл\n• Тест: лимит времени,\n  попытки, проходной %\n• Назначение группе" as InTests
+
+rectangle "Расписание занятий\n──────────────────\n• Тип (лекция/практика/\n  лабораторная/семинар)\n• Дата и время\n• Кабинет\n• Тема" as InLessons
+
+' ─────────────── ВХОДНЫЕ БЛОКИ СТУДЕНТА ───────────────
+rectangle "Ответы на тесты\n──────────────────\n• Выбор варианта(ов)\n• Ввод текста\n• Сопоставление\n• Упорядочивание\n• Время на вопрос" as InAnswers
+
+' ─────────────── ЯДРО СИСТЕМЫ ───────────────
+rectangle "Система мониторинга успеваемости" as System #E8F5E9 {
+    database "База данных\nобразовательной организации\n──────────────────────\nusers · students · teachers\ngroups · departments · subjects\nteaching_assignments · lessons\ngrades · attendance · topics\ntests · test_sessions\nquestion_answers\nadaptive_recommendations\nnotifications · audit_log" as DB
+}
+
+' ─────────────── ВЫХОДНЫЕ БЛОКИ ───────────────
+rectangle "Индивидуальный дашборд\nобучающегося\n──────────────────\n• Средний балл\n• Кол-во оценок\n• % посещаемости\n• Пройдено тестов\n• График оценок по времени\n• Оценки по дисциплинам" as OutStudentDash
+
+rectangle "Мои оценки\n──────────────────\n• Все оценки с типами\n• По дисциплинам\n• С комментариями\n• С датами" as OutMyGrades
+
+rectangle "Моя посещаемость\n──────────────────\n• % посещаемости\n• По занятиям\n• С комментариями" as OutMyAttendance
+
+rectangle "Мои тесты\n──────────────────\n• Доступные тесты\n• Пройденные / истёкшие\n• Лучший результат\n• Попытки" as OutMyTests
+
+rectangle "Адаптивные рекомендации\n──────────────────\n• Mastery level по темам\n• Рекомендуемая сложность\n• Прогресс по разделам" as OutAdaptive
+
+rectangle "Дашборд преподавателя\n──────────────────\n• Средний балл по группам\n• % посещаемости по группам\n• Топ студентов\n• Сводка по своим группам" as OutTeacherDash
+
+rectangle "Аналитика по группам\n──────────────────\n• Средний балл по дисциплинам\n• Мин / макс по группе\n• % посещаемости по дисциплинам\n• Статистика тестов:\n  попытки, сдали, средний %" as OutGroupAnalytics
+
+rectangle "Прогресс студента\n(для преподавателя)\n──────────────────\n• Оценки по дисциплинам\n• Посещаемость\n• Результаты тестов" as OutStudentProgress
+
+rectangle "Электронные ведомости\n(Экспорт)\n──────────────────\n• Оценки: группа, дисциплина,\n  год, семестр, тип оценки\n• Посещаемость: группа,\n  дисциплина, период\n• Форматы: Excel / PDF" as OutExport
+
+rectangle "Дашборд администратора\n──────────────────\n• Кол-во: студентов, преподавателей,\n  групп, дисциплин\n• Рейтинг студентов\n• Рейтинг групп\n• Рейтинг дисциплин" as OutAdminDash
+
+rectangle "Результаты тест-сессий\n(Автопроверка)\n──────────────────\n• Балл за тест\n• Пройден / не пройден\n• Детализация по вопросам\n• Время выполнения" as OutTestResult
+
+rectangle "Уведомления\n──────────────────\n• Назначен тест\n• Результат теста\n• Выставлена оценка\n• Напоминания" as OutNotifications
+
+rectangle "Журнал аудита\n(только Администратор)\n──────────────────\n• Кто, что, когда изменил\n• Старые и новые значения\n• IP-адрес" as OutAudit
+
+' ─────────────── СВЯЗИ: ВХОД АДМИНИСТРАТОРА ───────────────
+Admin --> InStudents    : вводит
+Admin --> InTeachers    : вводит
+Admin --> InSubjects    : вводит
+Admin --> InGroups      : вводит
+Admin --> InAssignments : вводит
+Admin --> InUsers       : вводит
+
+InStudents    --> DB
+InTeachers    --> DB
+InSubjects    --> DB
+InGroups      --> DB
+InAssignments --> DB
+InUsers       --> DB
+
+' ─────────────── СВЯЗИ: ВХОД ПРЕПОДАВАТЕЛЯ ───────────────
+Teacher --> InGrades     : вводит
+Teacher --> InAttendance : вводит
+Teacher --> InTests      : создаёт
+Teacher --> InLessons    : планирует
+
+InGrades     --> DB
+InAttendance --> DB
+InTests      --> DB
+InLessons    --> DB
+
+' ─────────────── СВЯЗИ: ВХОД СТУДЕНТА ───────────────
+Student --> InAnswers : отвечает
+InAnswers --> DB
+
+' ─────────────── СВЯЗИ: ВЫХОД ДЛЯ СТУДЕНТА ───────────────
+DB --> OutStudentDash  : формирует
+DB --> OutMyGrades     : формирует
+DB --> OutMyAttendance : формирует
+DB --> OutMyTests      : формирует
+DB --> OutAdaptive     : формирует
+DB --> OutTestResult   : формирует
+DB --> OutNotifications: формирует
+
+OutStudentDash  --> Student : просматривает
+OutMyGrades     --> Student : просматривает
+OutMyAttendance --> Student : просматривает
+OutMyTests      --> Student : просматривает
+OutAdaptive     --> Student : просматривает
+OutTestResult   --> Student : получает
+OutNotifications --> Student : получает
+
+' ─────────────── СВЯЗИ: ВЫХОД ДЛЯ ПРЕПОДАВАТЕЛЯ ───────────────
+DB --> OutTeacherDash     : формирует
+DB --> OutGroupAnalytics  : формирует
+DB --> OutStudentProgress : формирует
+DB --> OutExport          : формирует
+
+OutTeacherDash     --> Teacher : просматривает
+OutGroupAnalytics  --> Teacher : просматривает
+OutStudentProgress --> Teacher : просматривает
+OutExport          --> Teacher : получает
+OutNotifications   --> Teacher : получает
+
+' ─────────────── СВЯЗИ: ВЫХОД ДЛЯ АДМИНИСТРАТОРА ───────────────
+DB --> OutAdminDash : формирует
+DB --> OutAudit     : формирует
+
+OutAdminDash    --> Admin : просматривает
+OutExport       --> Admin : получает
+OutNotifications --> Admin : получает
+OutAudit        --> Admin : просматривает
+
+@enduml

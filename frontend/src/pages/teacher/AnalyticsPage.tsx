@@ -4,10 +4,13 @@ import {
   Box, Paper, Typography, Chip, CircularProgress,
   Table, TableHead, TableBody, TableRow, TableCell, LinearProgress,
 } from '@mui/material'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, Legend, ReferenceLine,
+} from 'recharts'
 import { getMyTeacherProfile, getAssignments } from '../../api/resources'
-import { getGroupSummary, getTopStudents } from '../../api/analytics'
-import type { GroupSummaryRow, TopStudent } from '../../api/analytics'
+import { getGroupSummary, getTopStudents, getGroupDynamics } from '../../api/analytics'
+import type { GroupSummaryRow, TopStudent, GroupDynamics } from '../../api/analytics'
 import client from '../../api/client'
 
 function mergeSummaries(all: GroupSummaryRow[]): GroupSummaryRow[] {
@@ -53,6 +56,7 @@ export default function AnalyticsPage() {
   const [groupNames, setGroupNames] = useState<Record<number, string>>({})
   const [gradeSummary, setGradeSummary] = useState<GroupSummaryRow[]>([])
   const [topStudents, setTopStudents] = useState<TopStudent[]>([])
+  const [dynamics, setDynamics] = useState<GroupDynamics[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -69,12 +73,14 @@ export default function AnalyticsPage() {
         for (const g of groups) nameMap[g.id] = g.name
         setGroupNames(nameMap)
         if (ids.length === 0) return
-        const [allSummaries, allStudents] = await Promise.all([
+        const [allSummaries, allStudents, allDynamics] = await Promise.all([
           Promise.all(ids.map(id => getGroupSummary(id))).then(results => results.flat()),
           Promise.all(ids.map(id => getTopStudents(id))).then(results => results.flat()),
+          Promise.all(ids.map(id => getGroupDynamics(id))),
         ])
         setGradeSummary(mergeSummaries(allSummaries))
         setTopStudents(mergeStudents(allStudents))
+        setDynamics(allDynamics)
       } finally { setLoading(false) }
     }
     init()
@@ -94,6 +100,23 @@ export default function AnalyticsPage() {
   }))
 
   const groupLabel = groupIds.length > 0 ? groupIds.map(id => groupNames[id] ?? `Группа ${id}`).join(', ') : ''
+
+  // Build merged dynamics chart data: periods across all groups
+  const dynChartData = (() => {
+    const periodMap = new Map<string, { period: string; [grp: string]: number | string }>()
+    dynamics.forEach((d, idx) => {
+      const grpName = groupNames[groupIds[idx]] ?? `Группа ${groupIds[idx]}`
+      d.periods.forEach(p => {
+        const key = `${p.acad_year} · сем.${p.semester}`
+        if (!periodMap.has(key)) periodMap.set(key, { period: key })
+        periodMap.get(key)![grpName] = Number(p.avg_grade)
+      })
+    })
+    return Array.from(periodMap.values())
+  })()
+
+  const dynGroupNames = groupIds.map(id => groupNames[id] ?? `Группа ${id}`)
+  const LINE_COLORS = ['#C9874A', '#347856', '#1D4ED8', '#9333ea', '#0891b2']
 
   return (
     <Box sx={{ p: 4, maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -181,6 +204,31 @@ export default function AnalyticsPage() {
                   })}
                 </TableBody>
               </Table>
+            </Paper>
+          )}
+
+          {dynChartData.length > 1 && (
+            <Paper elevation={1} sx={{ p: 3 }}>
+              <Typography variant="subtitle1" fontWeight={600}>Динамика среднего балла по семестрам</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>{groupLabel}</Typography>
+              <ResponsiveContainer width="100%" height={260}>
+                <LineChart data={dynChartData} margin={{ top: 4, right: 16, left: -10, bottom: 48 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#64748b' }} angle={-30} textAnchor="end" interval={0} />
+                  <YAxis domain={[1, 5]} tick={{ fontSize: 11, fill: '#64748b' }} />
+                  <ReferenceLine y={3} stroke="#e2e8f0" strokeDasharray="4 2" />
+                  <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} formatter={(v: number) => [v.toFixed(2), '']} />
+                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+                  {dynGroupNames.map((name, i) => (
+                    <Line
+                      key={name} type="monotone" dataKey={name}
+                      stroke={LINE_COLORS[i % LINE_COLORS.length]}
+                      strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }}
+                      connectNulls
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
             </Paper>
           )}
 

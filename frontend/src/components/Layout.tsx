@@ -7,7 +7,7 @@ import {
   HomeRounded, CalendarMonthRounded, PeopleRounded, SchoolRounded,
   PersonRounded, GroupsRounded, ApartmentRounded, MenuBookRounded,
   GradeRounded, EventAvailableRounded, QuizRounded, BarChartRounded,
-  BoltRounded, LogoutRounded,
+  BoltRounded, LogoutRounded, DownloadRounded,
 } from '@mui/icons-material'
 import { alpha } from '@mui/material/styles'
 import { useAuthStore } from '../store/authStore'
@@ -36,6 +36,7 @@ const ROLE_NAV: Record<string, NavItem[]> = {
     { to: '/tests',      label: 'Тесты',         icon: <QuizRounded fontSize="small" /> },
     { to: '/analytics',      label: 'Аналитика',       icon: <BarChartRounded fontSize="small" /> },
     { to: '/test-analytics', label: 'Аналитика тестов', icon: <QuizRounded fontSize="small" /> },
+    { to: '/reports',        label: 'Отчёты',          icon: <DownloadRounded fontSize="small" /> },
   ],
   student: [
     { to: '/dashboard',    label: 'Главная',       icon: <HomeRounded fontSize="small" /> },
