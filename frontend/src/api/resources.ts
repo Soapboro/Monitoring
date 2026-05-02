@@ -122,7 +122,30 @@ export const getSubjects = () => client.get<Subject[]>('/subjects').then(r => r.
 export const getDepartments = () => client.get<Department[]>('/departments').then(r => r.data)
 
 // User CRUD
-export const createUser = (data: { email: string; password: string; role: string }) =>
+export type UserCreateData = {
+  email: string
+  password: string
+  role: string
+  teacher_profile?: {
+    last_name: string
+    first_name: string
+    middle_name?: string | null
+    position?: string | null
+    phone?: string | null
+    department_id?: number | null
+  }
+  student_profile?: {
+    last_name: string
+    first_name: string
+    middle_name?: string | null
+    birth_date?: string | null
+    group_id: number
+    student_num?: string | null
+    phone?: string | null
+  }
+}
+
+export const createUser = (data: UserCreateData) =>
   client.post('/users', data).then(r => r.data)
 export const updateUser = (id: number, data: { email?: string; is_active?: boolean; role?: string }) =>
   client.patch(`/users/${id}`, data).then(r => r.data)
