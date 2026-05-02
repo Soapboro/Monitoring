@@ -22,7 +22,9 @@ async def _get_teacher_id(current_user: User, db: AsyncSession) -> int | None:
     if current_user.role.value in ("teacher",):
         result = await db.execute(select(Teacher).where(Teacher.user_id == current_user.id))
         t = result.scalar_one_or_none()
-        return t.id if t else None
+        if not t:
+            raise HTTPException(status_code=404, detail="Профиль преподавателя не найден")
+        return t.id
     return None
 
 
@@ -328,6 +330,22 @@ async def add_question_to_test(
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
     await _require_author(test, teacher_id)
+    question_result = await db.execute(select(Question).where(Question.id == data.question_id))
+    question = question_result.scalar_one_or_none()
+    if not question:
+        raise HTTPException(status_code=404, detail="Вопрос не найден")
+    if teacher_id is not None and question.author_id != teacher_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к вопросу")
+
+    existing = await db.execute(
+        select(TestQuestion).where(
+            TestQuestion.test_id == test_id,
+            TestQuestion.question_id == data.question_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Вопрос уже добавлен в тест")
+
     tq = TestQuestion(test_id=test_id, **data.model_dump())
     db.add(tq)
     await db.commit()

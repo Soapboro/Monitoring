@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.database import get_db
 from app.models.question import Question
 from app.models.teacher import Teacher
+from app.models.topic import Topic
 from app.models.user import User
 from app.schemas.question import QuestionCreate, QuestionUpdate, QuestionOut
 from app.dependencies import require_teacher
@@ -16,25 +17,37 @@ async def _get_teacher_id(current_user: User, db: AsyncSession) -> int | None:
     if current_user.role.value == "teacher":
         result = await db.execute(select(Teacher).where(Teacher.user_id == current_user.id))
         teacher = result.scalar_one_or_none()
-        return teacher.id if teacher else None
+        if not teacher:
+            raise HTTPException(status_code=404, detail="Профиль преподавателя не найден")
+        return teacher.id
     return None
 
 
 @router.get("", response_model=list[QuestionOut])
 async def list_questions(
     topic_id: int | None = None,
+    subject_id: int | None = None,
     difficulty: str | None = None,
     is_active: bool | None = None,
+    search: str | None = None,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
+    teacher_id = await _get_teacher_id(current_user, db)
     query = select(Question)
+    if subject_id:
+        query = query.join(Topic).where(Topic.subject_id == subject_id)
     if topic_id:
         query = query.where(Question.topic_id == topic_id)
     if difficulty:
         query = query.where(Question.difficulty == difficulty)
     if is_active is not None:
         query = query.where(Question.is_active == is_active)
+    if search:
+        query = query.where(Question.body.ilike(f"%{search}%"))
+    if teacher_id is not None:
+        query = query.where(Question.author_id == teacher_id)
+    query = query.order_by(Question.created_at.desc(), Question.id.desc())
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -57,12 +70,15 @@ async def create_question(
 async def get_question(
     question_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
     result = await db.execute(select(Question).where(Question.id == question_id))
     q = result.scalar_one_or_none()
     if not q:
         raise HTTPException(status_code=404, detail="Вопрос не найден")
+    teacher_id = await _get_teacher_id(current_user, db)
+    if teacher_id is not None and q.author_id != teacher_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к вопросу")
     return q
 
 
@@ -77,6 +93,9 @@ async def update_question(
     q = result.scalar_one_or_none()
     if not q:
         raise HTTPException(status_code=404, detail="Вопрос не найден")
+    teacher_id = await _get_teacher_id(current_user, db)
+    if teacher_id is not None and q.author_id != teacher_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к вопросу")
     for field, value in data.model_dump(exclude_none=True).items():
         setattr(q, field, value)
     await db.commit()
@@ -88,11 +107,14 @@ async def update_question(
 async def delete_question(
     question_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_teacher),
+    current_user: User = Depends(require_teacher),
 ):
     result = await db.execute(select(Question).where(Question.id == question_id))
     q = result.scalar_one_or_none()
     if not q:
         raise HTTPException(status_code=404, detail="Вопрос не найден")
+    teacher_id = await _get_teacher_id(current_user, db)
+    if teacher_id is not None and q.author_id != teacher_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к вопросу")
     await db.delete(q)
     await db.commit()

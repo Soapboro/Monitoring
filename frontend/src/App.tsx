@@ -18,6 +18,7 @@ import GradesPage from './pages/teacher/GradesPage'
 import AttendancePage from './pages/teacher/AttendancePage'
 import TestsPage from './pages/teacher/TestsPage'
 import TestEditorPage from './pages/teacher/TestEditorPage'
+import QuestionBankPage from './pages/teacher/QuestionBankPage'
 import AnalyticsPage from './pages/teacher/AnalyticsPage'
 import TestAnalyticsPage from './pages/teacher/TestAnalyticsPage'
 import LessonsPage from './pages/teacher/LessonsPage'
@@ -78,6 +79,7 @@ export default function App() {
                   <Route path="/attendance" element={<AttendancePage />} />
                   <Route path="/tests" element={<TestsPage />} />
                   <Route path="/tests/:id" element={<TestEditorPage />} />
+                  <Route path="/question-bank" element={<QuestionBankPage />} />
                   <Route path="/analytics" element={<AnalyticsPage />} />
                   <Route path="/test-analytics" element={<TestAnalyticsPage />} />
                   <Route path="/reports" element={<ReportsPage />} />

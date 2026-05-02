@@ -4,11 +4,12 @@ import {
   Box, Paper, Typography, Chip, CircularProgress, Button, IconButton,
   Tabs, Tab, TextField, Checkbox, FormControlLabel, Select, MenuItem,
   Table, TableHead, TableBody, TableRow, TableCell, Dialog, DialogTitle,
-  DialogContent, DialogActions, Alert,
+  DialogContent, DialogActions, Alert, Stack,
 } from '@mui/material'
 import {
   ArrowBackRounded, AddRounded, DeleteOutlineRounded,
   KeyboardArrowUpRounded, KeyboardArrowDownRounded,
+  MenuBookRounded, SearchRounded,
 } from '@mui/icons-material'
 import client from '../../api/client'
 import { getSubjects, getGroups, getMyTeacherProfile, getAssignments } from '../../api/resources'
@@ -456,6 +457,146 @@ function QuestionModal({ testId, subjectId, initial, onSave, onClose }: {
 
 // ─── Main page ─────────────────────────────────────────────────────────────────
 
+function QuestionBankModal({ testId, subjectId, existingQuestionIds, currentCount, onSave, onClose }: {
+  testId: number
+  subjectId: number
+  existingQuestionIds: Set<number>
+  currentCount: number
+  onSave: () => void
+  onClose: () => void
+}) {
+  const [topics, setTopics] = useState<Topic[]>([])
+  const [questions, setQuestions] = useState<TQOut[]>([])
+  const [topicId, setTopicId] = useState<number | ''>('')
+  const [difficulty, setDifficulty] = useState('')
+  const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function loadQuestions() {
+    setLoading(true)
+    const params: Record<string, unknown> = { subject_id: subjectId, is_active: true }
+    if (topicId) params.topic_id = topicId
+    if (difficulty) params.difficulty = difficulty
+    if (search.trim()) params.search = search.trim()
+    const { data } = await client.get<TQOut[]>('/questions', { params })
+    setQuestions(data)
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    client.get<Topic[]>('/topics', { params: { subject_id: subjectId } }).then(r => setTopics(r.data))
+  }, [subjectId])
+
+  useEffect(() => {
+    loadQuestions()
+  }, [topicId, difficulty]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function toggle(id: number) {
+    if (existingQuestionIds.has(id)) return
+    setSelected(items => {
+      const next = new Set(items)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function addSelected() {
+    if (selected.size === 0) return
+    setSaving(true)
+    setError('')
+    try {
+      const selectedQuestions = questions.filter(q => selected.has(q.id))
+      await Promise.all(selectedQuestions.map((question, index) => client.post(`/tests/${testId}/questions`, {
+        question_id: question.id,
+        order_num: currentCount + index + 1,
+        score_max: question.score_max,
+      })))
+      onSave()
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'Ошибка добавления вопросов')
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth scroll="paper">
+      <DialogTitle>Добавить вопросы из банка</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1.4fr auto' }, gap: 1.5 }}>
+            <TextField select label="Тема" size="small" value={topicId} onChange={e => setTopicId(e.target.value ? Number(e.target.value) : '')}>
+              <MenuItem value="">Все темы</MenuItem>
+              {topics.map(topic => <MenuItem key={topic.id} value={topic.id}>{topic.title}</MenuItem>)}
+            </TextField>
+            <TextField select label="Сложность" size="small" value={difficulty} onChange={e => setDifficulty(e.target.value)}>
+              <MenuItem value="">Любая</MenuItem>
+              {DIFFICULTIES.map(item => <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>)}
+            </TextField>
+            <TextField label="Поиск" size="small" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') loadQuestions() }} />
+            <Button variant="outlined" startIcon={<SearchRounded />} onClick={loadQuestions}>Найти</Button>
+          </Box>
+
+          {loading ? (
+            <Box sx={{ p: 4, display: 'flex', justifyContent: 'center' }}><CircularProgress size={28} /></Box>
+          ) : questions.length === 0 ? (
+            <Paper sx={{ p: 4, textAlign: 'center' }}>
+              <Typography color="text.secondary">В банке нет подходящих вопросов</Typography>
+            </Paper>
+          ) : (
+            <Stack spacing={1}>
+              {questions.map(question => {
+                const alreadyAdded = existingQuestionIds.has(question.id)
+                const checked = selected.has(question.id)
+                return (
+                  <Paper
+                    key={question.id}
+                    variant="outlined"
+                    onClick={() => toggle(question.id)}
+                    sx={{
+                      p: 1.5,
+                      display: 'flex',
+                      gap: 1.5,
+                      cursor: alreadyAdded ? 'default' : 'pointer',
+                      bgcolor: checked ? '#EFF6FF' : alreadyAdded ? '#F8FAFC' : 'background.paper',
+                      borderColor: checked ? '#93C5FD' : 'divider',
+                      opacity: alreadyAdded ? 0.65 : 1,
+                    }}
+                  >
+                    <Checkbox size="small" checked={checked || alreadyAdded} disabled={alreadyAdded} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75, flexWrap: 'wrap' }}>
+                        <Chip label={QTYPE_LABEL[question.question_type] ?? question.question_type} size="small" sx={{ bgcolor: '#DBEAFE', color: '#1D4ED8' }} />
+                        <Chip label={question.difficulty} size="small" sx={DIFF_SX[question.difficulty] ?? { bgcolor: '#F1F5F9', color: '#64748b' }} />
+                        <Typography variant="caption" color="text.disabled">{question.score_max} б.</Typography>
+                        {alreadyAdded && <Chip label="Уже в тесте" size="small" />}
+                      </Box>
+                      <Typography variant="body2" sx={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                        {question.body}
+                      </Typography>
+                    </Box>
+                  </Paper>
+                )
+              })}
+            </Stack>
+          )}
+
+          {error && <Alert severity="error">{error}</Alert>}
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button color="inherit" onClick={onClose}>Отмена</Button>
+        <Button variant="contained" disabled={saving || selected.size === 0} onClick={addSelected}>
+          {saving ? 'Добавление...' : `Добавить (${selected.size})`}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
 export default function TestEditorPage() {
   const { id } = useParams<{ id: string }>()
   const testId = Number(id)
@@ -470,6 +611,7 @@ export default function TestEditorPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState(0) // 0=settings 1=questions 2=assign
   const [modal, setModal] = useState<TQOut | null | 'new'>(null)
+  const [bankModalOpen, setBankModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const [groupStudents, setGroupStudents] = useState<Record<number, { id: number; first_name: string; last_name: string; middle_name: string | null }[]>>({})
@@ -731,12 +873,20 @@ export default function TestEditorPage() {
               </Box>
             </Paper>
           ))}
-          <Button
-            fullWidth variant="outlined" startIcon={<AddRounded />} onClick={() => setModal('new')}
-            sx={{ borderStyle: 'dashed', py: 1.5, color: 'primary.main', borderColor: '#BFDBFE', '&:hover': { borderColor: 'primary.main', bgcolor: '#EFF6FF' } }}
-          >
-            Добавить вопрос
-          </Button>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+            <Button
+              variant="outlined" startIcon={<AddRounded />} onClick={() => setModal('new')}
+              sx={{ borderStyle: 'dashed', py: 1.5, color: 'primary.main', borderColor: '#BFDBFE', '&:hover': { borderColor: 'primary.main', bgcolor: '#EFF6FF' } }}
+            >
+              Добавить новый вопрос
+            </Button>
+            <Button
+              variant="outlined" startIcon={<MenuBookRounded />} onClick={() => setBankModalOpen(true)}
+              sx={{ borderStyle: 'dashed', py: 1.5, color: 'primary.main', borderColor: '#BFDBFE', '&:hover': { borderColor: 'primary.main', bgcolor: '#EFF6FF' } }}
+            >
+              Добавить из банка
+            </Button>
+          </Box>
         </Box>
       )}
 
@@ -908,6 +1058,16 @@ export default function TestEditorPage() {
           initial={modal === 'new' ? null : modal}
           onSave={async () => { await reloadQuestions(); setModal(null) }}
           onClose={() => setModal(null)}
+        />
+      )}
+      {bankModalOpen && (
+        <QuestionBankModal
+          testId={testId}
+          subjectId={test.subject_id}
+          existingQuestionIds={new Set(questions.map(question => question.id))}
+          currentCount={questions.length}
+          onSave={async () => { await reloadQuestions(); setBankModalOpen(false) }}
+          onClose={() => setBankModalOpen(false)}
         />
       )}
     </Box>
