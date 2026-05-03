@@ -86,6 +86,8 @@ export interface AttendanceRecord {
   id: number
   student_id: number
   assignment_id: number
+  subject_id?: number
+  subject_name?: string
   lesson_date: string
   is_present: boolean
   comment: string | null

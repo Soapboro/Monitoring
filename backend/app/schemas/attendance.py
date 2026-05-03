@@ -40,4 +40,9 @@ class AttendanceOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class StudentAttendanceOut(AttendanceOut):
+    subject_id: int
+    subject_name: str
+
+
 AttendanceBulkCreate.model_rebuild()

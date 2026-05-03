@@ -21,10 +21,12 @@ export default function MyAttendancePage() {
 
   const filtered = records.filter(r =>
     String(r.lesson_date).slice(0, 10).includes(search) ||
+    (r.subject_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
     (r.is_present ? 'присутствовал' : 'отсутствовал').includes(search.toLowerCase())
   )
   const { sorted, sortKey, sortDir, toggleSort } = useSort(filtered, (r, key) => {
     if (key === 'date')   return String(r.lesson_date).slice(0, 10)
+    if (key === 'subject') return r.subject_name ?? ''
     if (key === 'status') return r.is_present ? 1 : 0
     return ''
   })
@@ -35,11 +37,11 @@ export default function MyAttendancePage() {
   const rate    = records.length > 0 ? Math.round(present / records.length * 100) : null
 
   return (
-    <Box sx={{ p: 4, maxWidth: 700 }}>
+    <Box sx={{ p: 4, maxWidth: 900 }}>
       <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
-        <Typography variant="h5" fontWeight={700}>Посещаемость</Typography>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>Посещаемость</Typography>
         <TextField
-          size="small" placeholder="Поиск по дате или статусу..."
+          size="small" placeholder="Поиск по дате, дисциплине или статусу..."
           value={search} onChange={e => setSearch(e.target.value)}
           slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> } }}
           sx={{ width: 240 }}
@@ -58,7 +60,7 @@ export default function MyAttendancePage() {
           ].map(c => (
             <Paper key={c.label} elevation={1} sx={{ p: 2 }}>
               <Typography variant="caption" color="text.secondary">{c.label}</Typography>
-              <Typography variant="h5" fontWeight={700} sx={{ color: c.color }}>{c.value}</Typography>
+              <Typography variant="h5" sx={{ color: c.color, fontWeight: 700 }}>{c.value}</Typography>
             </Paper>
           ))}
         </Box>
@@ -72,6 +74,7 @@ export default function MyAttendancePage() {
             <TableHead>
               <TableRow>
                 <SortableHeader label="Дата"   sortKey="date"   currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Дисциплина" sortKey="subject" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 <SortableHeader label="Статус" sortKey="status" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
               </TableRow>
             </TableHead>
@@ -79,6 +82,7 @@ export default function MyAttendancePage() {
               {sorted.map(r => (
                 <TableRow key={r.id} hover>
                   <TableCell sx={{ color: 'text.secondary' }}>{String(r.lesson_date).slice(0, 10)}</TableCell>
+                  <TableCell>{r.subject_name ?? `Предмет #${r.subject_id ?? r.assignment_id}`}</TableCell>
                   <TableCell align="right">
                     <Chip
                       label={r.is_present ? 'Присутствовал' : 'Отсутствовал'}

@@ -14,7 +14,7 @@ from app.models.subject import Subject
 from app.models.user import User, UserRole
 from app.schemas.student import StudentCreate, StudentUpdate, StudentOut
 from app.schemas.grade import GradeOut, StudentGradeOut
-from app.schemas.attendance import AttendanceOut
+from app.schemas.attendance import AttendanceOut, StudentAttendanceOut
 from app.schemas.test_session import SessionOut
 from app.security import hash_password
 from app.dependencies import require_admin, require_teacher, get_current_user
@@ -163,7 +163,7 @@ async def my_grades(
     ]
 
 
-@router.get("/me/attendance", response_model=list[AttendanceOut], tags=["student-cabinet"])
+@router.get("/me/attendance", response_model=list[StudentAttendanceOut], tags=["student-cabinet"])
 async def my_attendance(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -171,11 +171,21 @@ async def my_attendance(
     """Посещаемость текущего студента."""
     student = await _get_me(current_user, db)
     result = await db.execute(
-        select(Attendance)
+        select(Attendance, Subject.id.label("subject_id"), Subject.name.label("subject_name"))
+        .join(TeachingAssignment, Attendance.assignment_id == TeachingAssignment.id)
+        .join(Subject, TeachingAssignment.subject_id == Subject.id)
         .where(Attendance.student_id == student.id)
         .order_by(Attendance.lesson_date.desc())
     )
-    return result.scalars().all()
+    rows = result.all()
+    return [
+        {
+            **AttendanceOut.model_validate(attendance).model_dump(),
+            "subject_id": subject_id,
+            "subject_name": subject_name,
+        }
+        for attendance, subject_id, subject_name in rows
+    ]
 
 
 @router.get("/me/sessions", response_model=list[SessionOut], tags=["student-cabinet"])
