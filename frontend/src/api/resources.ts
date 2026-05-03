@@ -36,6 +36,8 @@ export interface GradeOut {
   id: number
   student_id: number
   assignment_id: number
+  subject_id?: number
+  subject_name?: string
   grade_type: string
   value: number | null
   passed: boolean | null

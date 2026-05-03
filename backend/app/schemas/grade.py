@@ -36,3 +36,8 @@ class GradeOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class StudentGradeOut(GradeOut):
+    subject_id: int
+    subject_name: str

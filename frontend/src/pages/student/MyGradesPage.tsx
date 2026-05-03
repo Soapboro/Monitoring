@@ -23,10 +23,11 @@ export default function MyGradesPage() {
   }, [])
 
   const filtered = grades.filter(g =>
-    `${g.date_recorded} ${GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}`.toLowerCase().includes(search.toLowerCase())
+    `${g.date_recorded} ${g.subject_name ?? ''} ${GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}`.toLowerCase().includes(search.toLowerCase())
   )
   const { sorted, sortKey, sortDir, toggleSort } = useSort(filtered, (g, key) => {
     if (key === 'date')   return g.date_recorded
+    if (key === 'subject') return g.subject_name ?? ''
     if (key === 'type')   return GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type
     if (key === 'value')  return g.value ?? -1
     if (key === 'passed') return g.passed === true ? 1 : g.passed === false ? 0 : -1
@@ -36,14 +37,14 @@ export default function MyGradesPage() {
   if (loading) return <Spin />
 
   return (
-    <Box sx={{ p: 4, maxWidth: 700 }}>
+    <Box sx={{ p: 4, maxWidth: 900 }}>
       <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight={700}>Мои оценки</Typography>
+          <Typography variant="h5" sx={{ fontWeight: 700 }}>Мои оценки</Typography>
           <Typography variant="body2" color="text.secondary">Всего: {grades.length}</Typography>
         </Box>
         <TextField
-          size="small" placeholder="Поиск по дате или типу..."
+          size="small" placeholder="Поиск по дате, дисциплине или типу..."
           value={search} onChange={e => setSearch(e.target.value)}
           slotProps={{ input: { startAdornment: <InputAdornment position="start"><SearchRounded sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> } }}
           sx={{ width: 240 }}
@@ -56,6 +57,7 @@ export default function MyGradesPage() {
             <TableHead>
               <TableRow>
                 <SortableHeader label="Дата"   sortKey="date"   currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
+                <SortableHeader label="Дисциплина" sortKey="subject" currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 <SortableHeader label="Тип"    sortKey="type"   currentKey={sortKey} dir={sortDir} onSort={toggleSort} />
                 <SortableHeader label="Оценка" sortKey="value"  currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
                 <SortableHeader label="Зачёт"  sortKey="passed" currentKey={sortKey} dir={sortDir} onSort={toggleSort} align="right" />
@@ -65,6 +67,7 @@ export default function MyGradesPage() {
               {sorted.map(g => (
                 <TableRow key={g.id} hover>
                   <TableCell sx={{ color: 'text.secondary' }}>{String(g.date_recorded).slice(0, 10)}</TableCell>
+                  <TableCell>{g.subject_name ?? `Предмет #${g.subject_id ?? g.assignment_id}`}</TableCell>
                   <TableCell sx={{ color: 'text.secondary' }}>{GRADE_TYPE_LABELS[g.grade_type] ?? g.grade_type}</TableCell>
                   <TableCell align="right">
                     {g.value !== null ? (

@@ -13,7 +13,7 @@ from app.models.topic import Topic
 from app.models.subject import Subject
 from app.models.user import User, UserRole
 from app.schemas.student import StudentCreate, StudentUpdate, StudentOut
-from app.schemas.grade import GradeOut
+from app.schemas.grade import GradeOut, StudentGradeOut
 from app.schemas.attendance import AttendanceOut
 from app.schemas.test_session import SessionOut
 from app.security import hash_password
@@ -134,7 +134,7 @@ async def my_profile(
     return await _get_me(current_user, db)
 
 
-@router.get("/me/grades", response_model=list[GradeOut], tags=["student-cabinet"])
+@router.get("/me/grades", response_model=list[StudentGradeOut], tags=["student-cabinet"])
 async def my_grades(
     subject_id: int | None = None,
     db: AsyncSession = Depends(get_db),
@@ -143,15 +143,24 @@ async def my_grades(
     """Оценки текущего студента."""
     student = await _get_me(current_user, db)
     query = (
-        select(Grade)
+        select(Grade, Subject.id.label("subject_id"), Subject.name.label("subject_name"))
         .join(TeachingAssignment, Grade.assignment_id == TeachingAssignment.id)
+        .join(Subject, TeachingAssignment.subject_id == Subject.id)
         .where(Grade.student_id == student.id)
         .order_by(Grade.date_recorded.desc())
     )
     if subject_id:
         query = query.where(TeachingAssignment.subject_id == subject_id)
     result = await db.execute(query)
-    return result.scalars().all()
+    rows = result.all()
+    return [
+        {
+            **GradeOut.model_validate(grade).model_dump(),
+            "subject_id": subject_id,
+            "subject_name": subject_name,
+        }
+        for grade, subject_id, subject_name in rows
+    ]
 
 
 @router.get("/me/attendance", response_model=list[AttendanceOut], tags=["student-cabinet"])
